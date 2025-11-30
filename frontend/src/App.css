@@ -1,0 +1,186 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Estilos base para Nav Links */
+.nav-link {
+  transition: all 0.3s ease !important;
+}
+
+/* Hover en modo light */
+[data-bs-theme="light"] .nav-link:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  transform: translateY(-2px);
+}
+
+/* Hover en modo dark */
+[data-bs-theme="dark"] .nav-link:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-2px);
+}
+
+/* Evita que se quede pegado */
+.nav-link:active, .nav-link:focus {
+  background: transparent !important;
+  transform: translateY(0);
+}
+
+/* Mejoras generales */
+.table th, .table td {
+  vertical-align: middle;
+}
+
+.card.hover-shadow:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.form-label {
+  font-weight: 500;
+}
+
+.form-control, .form-select {
+  border-radius: 0.5rem;
+}
+
+.btn {
+  transition: all 0.3s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+}
+
+.modal-content {
+  border-radius: 0.75rem;
+}
+
+.thumbnail {
+  border: 2px solid transparent;
+  transition: border-color 0.3s ease;
+}
+
+.thumbnail:hover {
+  border-color: var(--bs-success);
+}
+
+/* Estilos para botones de navegación de miniaturas */
+.thumbnail-nav-btn {
+  background-color: rgba(255, 255, 255, 0.8);
+  border: none;
+  transition: background-color 0.3s ease;
+}
+
+.thumbnail-nav-btn:hover {
+  background-color: rgba(255, 255, 255, 1);
+}
+
+[data-bs-theme="dark"] .thumbnail-nav-btn {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+[data-bs-theme="dark"] .thumbnail-nav-btn:hover {
+  background-color: rgba(0, 0, 0, 1);
+}
+
+/* Ajustes para modo oscuro en la tabla */
+[data-bs-theme="dark"] .table-dark {
+  background-color: #212529;
+  color: #ffffff;
+}
+
+[data-bs-theme="dark"] .table-dark th {
+  background-color: #343a40;
+  color: #ffffff;
+}
+
+[data-bs-theme="dark"] .table-dark td {
+  background-color: #212529;
+  color: #ffffff;
+}
+
+[data-bs-theme="dark"] .modal-content {
+  background-color: #212529;
+  color: #ffffff;
+}
+
+[data-bs-theme="dark"] .modal-header {
+  background-color: #343a40;
+}
+
+[data-bs-theme="dark"] .modal-body {
+  background-color: #212529;
+}
+
+[data-bs-theme="dark"] .modal-footer {
+  background-color: #212529;
+}
+
+[data-bs-theme="dark"] .form-control,
+[data-bs-theme="dark"] .form-select {
+  background-color: #343a40;
+  color: #ffffff;
+  border-color: #495057;
+}
+
+[data-bs-theme="dark"] .form-control:focus,
+[data-bs-theme="dark"] .form-select:focus {
+  background-color: #3b4045;
+  color: #ffffff;
+  border-color: #6c757d;
+}
+
+[data-bs-theme="dark"] .input-group-text {
+  background-color: #343a40;
+  color: #ffffff;
+  border-color: #495057;
+}
+
+/* Estilos para botones de eliminación */
+.btn-outline-danger {
+  transition: all 0.3s ease;
+}
+
+[data-bs-theme="light"] .btn-outline-danger:hover {
+  background-color: #dc3545;
+  color: #ffffff;
+}
+
+[data-bs-theme="dark"] .btn-outline-danger:hover {
+  background-color: #dc3545;
+  color: #ffffff;
+}
