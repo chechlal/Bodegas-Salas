@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Product, Brand, Category, Provider, ProductImage
+from .models import Product, Brand, Category, Provider, ProductImage, StockMovement
 from simple_history.models import HistoricalRecords
 
 class BrandSerializer(serializers.ModelSerializer):
@@ -33,11 +33,13 @@ class ProductImageSerializer(serializers.ModelSerializer):
         fields = ['id', 'image', 'is_principal', 'product']
 
 class ProductSerializer(serializers.ModelSerializer):
+    # Read-only fields for display
     brand = BrandSerializer(read_only=True)
     category = CategorySerializer(read_only=True)
     provider = ProviderSerializer(read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
 
+    # Write-only fields for input (IDs)
     brand_id = serializers.PrimaryKeyRelatedField(
         queryset=Brand.objects.all(), source="brand", write_only=True
     )
@@ -47,6 +49,9 @@ class ProductSerializer(serializers.ModelSerializer):
     provider_id = serializers.PrimaryKeyRelatedField(
         queryset=Provider.objects.all(), source="provider", write_only=True
     )
+
+    # Stock is read-only (calculated)
+    stock = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
@@ -65,3 +70,12 @@ class HistoricalProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product.history.model # Accede al modelo de historial
         fields = '__all__'
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    product_name = serializers.CharField(source='product.nombre_comercial', read_only=True)
+    user_name = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = StockMovement
+        fields = ['id', 'product', 'product_name', 'quantity', 'movement_type', 'user', 'user_name', 'reason', 'timestamp']
+        read_only_fields = ['user', 'timestamp'] # User set automatically in view

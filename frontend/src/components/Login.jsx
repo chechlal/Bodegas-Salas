@@ -8,7 +8,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isStaff } = useAuth(); // Note: isStaff might not be updated immediately in the same render cycle
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -20,7 +20,16 @@ function Login() {
       const success = await login(username, password);
       
       if (success) {
-        navigate('/admin-productos'); // Redirige al panel de admin
+        // We need to check the stored user info or wait for context update.
+        // Since login is async and sets state, we might need to rely on localStorage or the logic inside AuthContext.
+        // But for redirection, we can check the localStorage 'userInfo' which is set in login().
+        const storedUser = JSON.parse(localStorage.getItem('userInfo'));
+
+        if (storedUser && storedUser.is_staff) {
+            navigate('/admin-productos'); // Dashboard Admin
+        } else {
+            navigate('/catalogo'); // Vista Vendedor
+        }
       } else {
         setError('Usuario o contraseña incorrectos.');
       }
@@ -37,17 +46,17 @@ function Login() {
       <Card className="shadow-lg border-0" style={{ width: '100%', maxWidth: '450px' }}>
         <Card.Body className="p-4 p-md-5">
           <div className="text-center mb-4">
-            <i className="bi bi-box-arrow-in-right fs-1 text-success"></i>
-            <h2 className="fw-bold mb-0 mt-2">Iniciar Sesión</h2>
-            <p className="text-muted">Acceso solo para administradores</p>
+            <i className="bi bi-box-seam fs-1 text-primary"></i>
+            <h2 className="fw-bold mb-0 mt-2">Bodegas Salas PIM</h2>
+            <p className="text-muted">Gestión de Inventario Inteligente</p>
           </div>
           
           <Form onSubmit={handleSubmit}>
             <Form.Group className="mb-3" controlId="formUsername">
-              <Form.Label>Nombre de Usuario</Form.Label>
+              <Form.Label>Usuario</Form.Label>
               <Form.Control
                 type="text"
-                placeholder="Ej: admin"
+                placeholder="Ingresa tu usuario"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -59,7 +68,7 @@ function Login() {
               <Form.Label>Contraseña</Form.Label>
               <Form.Control
                 type="password"
-                placeholder="Tu contraseña"
+                placeholder="Ingresa tu contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -67,7 +76,6 @@ function Login() {
               />
             </Form.Group>
 
-            {/* Alerta de error que solo aparece si 'error' tiene contenido */}
             {error && (
               <Alert variant="danger" className="text-center">
                 {error}
@@ -75,7 +83,7 @@ function Login() {
             )}
 
             <div className="d-grid">
-              <Button variant="success" type="submit" size="lg" disabled={loading}>
+              <Button variant="primary" type="submit" size="lg" disabled={loading}>
                 {loading ? (
                   <>
                     <Spinner
@@ -85,7 +93,7 @@ function Login() {
                       role="status"
                       aria-hidden="true"
                     />
-                    <span className="ms-2">Ingresando...</span>
+                    <span className="ms-2">Accediendo...</span>
                   </>
                 ) : (
                   'Ingresar'

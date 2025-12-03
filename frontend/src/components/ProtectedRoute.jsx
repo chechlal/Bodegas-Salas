@@ -1,16 +1,21 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Asegúrate que la ruta sea correcta
+import { useAuth } from '../context/AuthContext';
 
-function ProtectedRoute() {
-  const { isAdmin } = useAuth(); // Obtiene el estado real desde el contexto
+function ProtectedRoute({ adminOnly = false }) {
+  const { user, isStaff } = useAuth();
 
-  if (!isAdmin) {
-    // Si no es admin, redirige a la página de login
+  // If not logged in, go to login
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Si es admin, permite el acceso a las rutas anidadas (Outlet)
+  // If Admin Only route and user is not Staff
+  if (adminOnly && !isStaff) {
+      // Redirect to their allowed area
+      return <Navigate to="/catalogo" replace />;
+  }
+
   return <Outlet />;
 }
 
