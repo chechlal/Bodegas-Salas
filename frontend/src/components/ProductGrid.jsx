@@ -31,7 +31,7 @@ const ProductGrid = () => {
   const loadProducts = async () => {
     setIsLoading(true);
     try {
-      const response = await authFetch("api/products/");
+      const response = await authFetch("/api/products/");
 
       if (!response.ok) {
         throw new Error("Error de permisos o conexión");

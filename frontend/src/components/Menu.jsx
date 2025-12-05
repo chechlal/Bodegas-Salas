@@ -66,7 +66,7 @@ function Menu({ theme = 'light', toggleTheme }) {
             </div>
 
             {/* --- LÓGICA DE BOTONES --- */}
-            {isAdmin ? (
+            {user ? (
               // Si es admin, mostrar botón de Cerrar Sesión
               <Button variant="outline-danger" onClick={handleLogout}>
                 <i className="bi bi-box-arrow-right me-2"></i>
