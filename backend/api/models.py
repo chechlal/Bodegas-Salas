@@ -2,6 +2,7 @@ from django.db import models
 from simple_history.models import HistoricalRecords # type: ignore
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.conf import settings
 
 class Brand(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name=_("Nombre de la Marca"))
@@ -40,6 +41,7 @@ class Provider(models.Model):
         ordering = ['name']
 
 class Product(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     nombre_comercial = models.CharField(max_length=255, verbose_name=_("Nombre Comercial"))
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, verbose_name=_("Marca"))
     ean = models.CharField(max_length=13, unique=True, verbose_name=_("EAN"))

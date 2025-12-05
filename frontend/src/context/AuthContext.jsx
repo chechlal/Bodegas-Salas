@@ -2,72 +2,92 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
-export const AuthProvider = ({ children }) => {
-    const [authTokens, setAuthTokens] = useState(() => 
-        localStorage.getItem('authTokens')
-            ? JSON.parse(localStorage.getItem('authTokens'))
-            : null
-    );
-    const [user, setUser] = useState(() => 
-        localStorage.getItem('authTokens')
-            ? { username: 'Admin' } // Puedes decodificar el JWT aquí para obtener el user
-            : null
-    );
-    const [isAdmin, setIsAdmin] = useState(() => !!localStorage.getItem('authTokens'));
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
 
-    const login = async (username, password) => {
-        const response = await fetch('/api/token/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
+  // Decodificar el token para sacar el rol (Admin/Vendedor)
+  const parseJwt = (token) => {
+    try {
+      return JSON.parse(atob(token.split('.')[1]));
+    } catch (e) {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      const decoded = parseJwt(token);
+      if (decoded) {
+        setUser({ 
+          username: decoded.username, 
+          role: decoded.role 
         });
+      }
+    }
+  }, [token]);
+
+  // --- ESTA ES LA FUNCIÓN QUE FALTABA ---
+  const login = async (username, password) => {
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/token/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
         const data = await response.json();
+        localStorage.setItem('token', data.access);
+        setToken(data.access);
+        return true; // Login exitoso
+      } else {
+        return false; // Credenciales incorrectas
+      }
+    } catch (error) {
+      console.error("Error de conexión:", error);
+      return false;
+    }
+  };
 
-        if (response.ok) {
-            setAuthTokens(data);
-            // Aquí podrías decodificar 'data.access' para obtener info del usuario
-            setUser({ username: username }); 
-            setIsAdmin(true);
-            localStorage.setItem('authTokens', JSON.stringify(data));
-            return true;
-        } else {
-            console.error("Error de login:", data);
-            return false;
-        }
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  };
+
+  const authFetch = async (url, options = {}) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
     };
 
-    const logout = () => {
-        setAuthTokens(null);
-        setUser(null);
-        setIsAdmin(false);
-        localStorage.removeItem('authTokens');
-    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-    // Función para agregar el token a todas las peticiones (muy importante)
-    // Deberías usar esto en AdminProducts.jsx en lugar de fetch simple,
-    // o configurar un interceptor de axios.
-    const authFetch = async (url, options = {}) => {
-        const headers = {
-            ...options.headers,
-            'Authorization': `Bearer ${authTokens.access}`
-        };
-        return fetch(url, { ...options, headers });
-    };
+    const response = await fetch(`http://127.0.0.1:8000${url}`, {
+      ...options,
+      headers,
+    });
 
+    if (response.status === 401) {
+      logout();
+      window.location.href = '/login';
+    }
 
-    const contextData = {
-        user,
-        isAdmin,
-        login,
-        logout,
-        authFetch // Para usar en peticiones de admin
-    };
+    return response;
+  };
 
-    return (
-        <AuthContext.Provider value={contextData}>
-            {children}
-        </AuthContext.Provider>
-    );
-};
+  return (
+    <AuthContext.Provider value={{ user, login, logout, authFetch, isAuthenticated: !!user }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}

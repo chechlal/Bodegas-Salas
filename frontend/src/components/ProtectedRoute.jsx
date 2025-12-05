@@ -1,17 +1,20 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Asegúrate que la ruta sea correcta
+import { useAuth } from '../context/AuthContext';
 
-function ProtectedRoute() {
-  const { isAdmin } = useAuth(); // Obtiene el estado real desde el contexto
+const ProtectedRoute = ({ requiredRole }) => {
+  const { isAuthenticated, user } = useAuth();
 
-  if (!isAdmin) {
-    // Si no es admin, redirige a la página de login
-    return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" />;
   }
 
-  // Si es admin, permite el acceso a las rutas anidadas (Outlet)
+  // Si se pide un rol y el usuario no lo tiene, lo mandamos al inicio
+  if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/" />; // O a una página de "Acceso Denegado"
+  }
+
   return <Outlet />;
-}
+};
 
 export default ProtectedRoute;

@@ -12,25 +12,41 @@ function Login() {
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+      e.preventDefault();
+      setError('');
+      setLoading(true);
 
-    try {
-      const success = await login(username, password);
-      
-      if (success) {
-        navigate('/admin-productos'); // Redirige al panel de admin
-      } else {
-        setError('Usuario o contraseña incorrectos.');
+      try {
+        const success = await login(username, password);
+        
+        if (success) {
+          // --- LÓGICA DE REDIRECCIÓN INTELIGENTE ---
+          // 1. Leemos el token recién guardado para saber quién es
+          const token = localStorage.getItem('token');
+          if (token) {
+              // Decodificamos el payload del JWT (la parte intermedia)
+              const payload = JSON.parse(atob(token.split('.')[1]));
+              
+              // 2. Si es ADMIN -> Admin Productos, Si es SELLER -> Catálogo
+              if (payload.role === 'ADMIN') {
+                  navigate('/admin-productos');
+              } else {
+                  navigate('/catalogo');
+              }
+          } else {
+              // Fallback por seguridad
+              navigate('/catalogo');
+          }
+        } else {
+          setError('Usuario o contraseña incorrectos (o error de servidor).');
+        }
+      } catch (err) {
+        console.error('Error detallado de login:', err);
+        setError('Error de conexión. Revisa la consola (F12) para más detalles.');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error('Error de login:', err);
-      setError('Ocurrió un error al intentar iniciar sesión. Por favor, inténtelo más tarde.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   return (
     <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>

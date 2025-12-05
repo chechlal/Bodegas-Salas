@@ -4,6 +4,8 @@ from django_filters.rest_framework import DjangoFilterBackend # type: ignore
 from .models import Product, Brand, Category, Provider, ProductImage
 from .serializers import ProductSerializer, BrandSerializer, CategorySerializer, ProviderSerializer, ProductImageSerializer, HistoricalProductSerializer
 from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from companies.permissions import IsAdminOrReadOnly, IsSellerUser
 
 class StandardResultSetPagination(PageNumberPagination):
     page_size = 20
@@ -13,6 +15,9 @@ class StandardResultSetPagination(PageNumberPagination):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().select_related("brand", "category", "provider").prefetch_related("images")
     serializer_class = ProductSerializer
+
+    permission_classes = [IsAuthenticated, IsAdminOrReadOnly]
+
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,

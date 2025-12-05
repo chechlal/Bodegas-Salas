@@ -48,16 +48,15 @@ function App() {
             <Route path="/contacto" element={<Contacto />} />
             <Route path="/login" element={<Login />} />
 
-            {/* --- RUTAS PROTEGIDAS (SOLO ADMIN) --- */}
-            <Route element={<ProtectedRoute />}> {/* 8. Usa el Guardián */}
-              <Route
-                path="/admin-productos"
-                element={<AdminProducts theme={theme} />}
-              />
-              <Route 
-                path="/admin-historial" 
-                element={<VistaDeHistorial />} 
-              />
+            {/* Rutas Solo Admin */}
+            <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
+              <Route path="/admin-productos" element={<AdminProducts theme={theme} />} />
+              <Route path="/admin-historial" element={<VistaDeHistorial />} />
+            </Route>
+
+            {/* Rutas para Vendedor y Admin (Catálogo) */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/catalogo" element={<VistaPrincipalCatalogo />} />
             </Route>
 
           </Routes>

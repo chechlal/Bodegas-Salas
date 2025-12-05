@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, Form, Button, Pagination, Card, Badge, Container, Row, Col, Spinner, Alert, Offcanvas } from 'react-bootstrap';
+import { useAuth } from '../context/AuthContext';
 
 const ProductGrid = () => {
+  const { authFetch } = useAuth();
   // --- Estados Originales ---
   const [products, setProducts] = useState([]);
   const [modalData, setModalData] = useState(null);
@@ -29,9 +31,14 @@ const ProductGrid = () => {
   const loadProducts = async () => {
     setIsLoading(true);
     try {
-      // Carga TODOS los productos
-      const response = await fetch("/api/products/");
+      const response = await authFetch("api/products/");
+
+      if (!response.ok) {
+        throw new Error("Error de permisos o conexión");
+      }
+
       const data = await response.json();
+      
       const productsArray = data.results || data;
       
       // Procesa los productos (como en tu versión original)

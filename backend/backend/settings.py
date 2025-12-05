@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'corsheaders',
     # Mis Apps
     'companies',
-    'inventory',
+    'api',
     'rest_framework',
     'rest_framework_simplejwt',
     'simple_history',
