@@ -62,6 +62,17 @@ class Product(models.Model):
 
     history = HistoricalRecords()
 
+    def recalcular_stock(self):
+        """
+        Suma todas las entradas y resta todas las salidas.
+        """
+        entradas = self.movements.filter(movement_type='IN').aggregate(total=models.Sum('quantity'))['total'] or 0
+        salidas = self.movements.filter(movement_type='OUT').aggregate(total=models.Sum('quantity'))['total'] or 0
+        
+        self.stock = entradas - salidas
+        # Guardamos solo el campo stock para optimizar y evitar bucles
+        self.save(update_fields=['stock'])
+
     def __str__(self):
         return f"{self.nombre_comercial} ({self.sku})"
 
@@ -90,3 +101,30 @@ class ProductImage(models.Model):
     class Meta:
         verbose_name = _("Imagen de Producto")
         verbose_name_plural = _("Imágenes de Productos")
+
+class StockMovement(models.Model):
+    MOVEMENT_TYPES = (
+        ('IN', 'Entrada (Compra/Devolución)'),
+        ('OUT', 'Salida (Venta/Merma)'),
+    )
+
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='movements', verbose_name=_("Producto"))
+    quantity = models.PositiveIntegerField(verbose_name=_("Cantidad"))
+    movement_type = models.CharField(max_length=3, choices=MOVEMENT_TYPES, verbose_name=_("Tipo"))
+    reason = models.CharField(max_length=255, verbose_name=_("Razón/Motivo"), blank=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, verbose_name=_("Usuario Responsable"))
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Fecha Movimiento"))
+
+    def save(self, *args, **kwargs):
+        # 1. Guardamos el movimiento primero
+        super().save(*args, **kwargs)
+        # 2. Le ordenamos al producto que se recalcule
+        self.product.recalcular_stock()
+
+    def __str__(self):
+        return f"{self.get_movement_type_display()} - {self.product.nombre_comercial} ({self.quantity})"
+
+    class Meta:
+        verbose_name = _("Movimiento de Stock")
+        verbose_name_plural = _("Movimientos de Stock")
+        ordering = ['-created_at']

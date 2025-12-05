@@ -1,6 +1,22 @@
 from rest_framework import serializers
 from .models import Product, Brand, Category, Provider, ProductImage
 from simple_history.models import HistoricalRecords
+from .models import StockMovement
+
+class StockMovementSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockMovement
+        fields = ['id', 'product', 'quantity', 'movement_type', 'reason', 'user', 'created_at']
+        read_only_fields = ['user', 'created_at'] # El usuario y fecha se ponen solos
+    
+    def validate(self, data):
+        if data['movement_type'] == 'OUT':
+            product = data['product']
+            if product.stock < data['quantity']:
+                raise serializers.ValidationError({
+                    "quantity": f"No hay suficiente stock. Disponible: {product.stock}, Intentado sacar: {data['quantity']}"
+                })
+        return data
 
 class BrandSerializer(serializers.ModelSerializer):
     class Meta:
@@ -56,6 +72,24 @@ class ProductSerializer(serializers.ModelSerializer):
             'brand', 'category', 'provider', 'images',
             'brand_id', 'category_id', 'provider_id',
             'created_at', 'updated_at'
+        ]
+        read_only_fields = ['stock']
+
+class ProductSellerSerializer(serializers.ModelSerializer):
+    # Reutilizamos los campos anidados para que se vea bonito (Marca, Categoría)
+    brand = BrandSerializer(read_only=True)
+    category = CategorySerializer(read_only=True)
+    images = ProductImageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Product
+        # EXCLUIMOS: costo_cg, provider, created_at, updated_at
+        fields = [
+            'id', 'nombre_comercial', 'ean', 'sku', 
+            'peso', 'dimensiones', 'descripcion', 
+            'lugar_bodega', 'edad_uso', 
+            'stock', 'precio_venta', 'rating', 
+            'brand', 'category', 'images'
         ]
 
 class HistoricalProductSerializer(serializers.ModelSerializer):
