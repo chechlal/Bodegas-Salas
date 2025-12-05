@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert } from "react-bootstrap";
+import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert, Badge, InputGroup } from "react-bootstrap";
 import { useAuth } from "../context/AuthContext";
 
 function AdminProducts({ theme }) {
@@ -25,6 +25,15 @@ function AdminProducts({ theme }) {
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
+
+  // Estados para gestión de stock
+  const [showStockModal, setShowStockModal] = useState(false);
+  const [selectedProductForStock, setSelectedProductForStock] = useState(null);
+  const [stockFormData, setStockFormData] = useState({
+    quantity: 1,
+    movement_type: 'IN',
+    reason: ''
+  });
 
   const [newBrandName, setNewBrandName] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -697,6 +706,54 @@ function AdminProducts({ theme }) {
     }
   };
 
+  const handleOpenStockModal = (product) => {
+    setSelectedProductForStock(product);
+    setStockFormData({ quantity: 1, movement_type: 'IN', reason: '' });
+    setShowStockModal(true);
+  }
+
+  const handleSubmitStockMovement = async () => {
+    setError(null); // Limpiar errores previos
+
+    // Validaciones básicas de UI
+    if (stockFormData.quantity <= 0) {
+      setError("La cantidad debe ser mayir a 0.")
+      return;
+    }
+    if (!stockFormData.reason.trim()) {
+      setError("Debe indicar una razón para el movimiento (ej: Compra, Merma, Ajuste).");
+      return;
+    }
+
+    try {
+      const payload = {
+        product: selectedProductForStock.id,
+        quantity: parseInt(stockFormData.quantity),
+        movement_type: stockFormData.movement_type,
+        reason: stockFormData.reason
+      };
+
+      const res = await authFetch('/api/movements/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const errData = await res.json();
+            const msg = errData.detail || (errData.quantity && errData.quantity[0]) || "Error al registrar movimiento";
+            throw new Error(msg);
+        }
+
+        setWarn("✅ Movimiento registrado correctamente. Stock actualizado.");
+        setShowStockModal(false);
+        await loadProducts();
+    } catch (e) {
+        console.error(e);
+        setError(e.message);
+    }
+  };
+
   const createdAtStr = formData.created_at?.toLocaleString() || "";
   const updatedAtStr = formData.updated_at?.toLocaleString() || "";
 
@@ -964,10 +1021,30 @@ function AdminProducts({ theme }) {
                   <td>{product.category?.name || "Sin categoría"}</td>
                   <td>{product.sku}</td>
                   <td>{formatPrice(product.precio_venta)}</td>
-                  <td>{product.stock}</td>
+                  <td className="text-center">
+                    {product.stock === 0 ? (
+                      <Badge bg="danger">AGOTADO</Badge>
+                    ) : product.stock < 5 ? (
+                      <Badge bg="danger">CRÍTICO ({product.stock})</Badge>
+                    ) : product.stock < 10 ? (
+                      <Badge bg="warning" text="dark">BAJO ({product.stock})</Badge>
+                    ) : (
+                      <Badge bg="success" className="px-3">{product.stock}</Badge>
+                    )}
+                  </td>
                   <td>{product.rating}</td>
                   <td>
-                    <div className="d-grid gap-2 d-sm-flex">
+                    <div className="d-grid gap-2 d-sm-flex justify-content-end">
+                      {/* Botón Nuevo: Gestión de Inventario */}
+                      <Button 
+                          variant="outline-dark" 
+                          size="sm" 
+                          className="me-2"
+                          title="Gestionar Inventario"
+                          onClick={() => handleOpenStockModal(product)}
+                      >
+                          <i className="bi bi-box-seam-fill"></i> Stock
+                      </Button>
                       <Button variant="warning" size="sm" className="me-2" onClick={() => handleEdit(product)}>
                         Editar
                       </Button>
@@ -1148,17 +1225,18 @@ function AdminProducts({ theme }) {
                       <Form.Text className="text-muted">Medida horizontal más corta.</Form.Text>
                     </Form.Group>
                   </Col>
-
                   <Col md={3}>
                     <Form.Group>
-                      <Form.Label>Stock</Form.Label>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        value={formData.stock ?? ""}
-                        onChange={(e) => setField("stock", e.target.value === "" ? "" : parseInt(e.target.value))}
-                        placeholder="Ej: 100"
+                      <Form.Label>Stock Actual</Form.Label>
+                      <Form.Control 
+                          type="text"
+                          value={formData.stock || 0} 
+                          disabled // BLOQUEADO
+                          className="bg-light fw-bold"
                       />
+                      <Form.Text className="text-muted" style={{fontSize: '0.75rem'}}>
+                          * Se calcula automáticamente
+                      </Form.Text>
                     </Form.Group>
                   </Col>
                   <Col md={3}>
@@ -1308,6 +1386,84 @@ function AdminProducts({ theme }) {
             <Modal.Footer className={theme === "dark" ? "bg-dark" : "bg-light"}>
               <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
               <Button variant="primary" onClick={handleSave}>Guardar</Button>
+            </Modal.Footer>
+          </Modal>
+          {/* --- MODAL DE LOGÍSTICA (ENTRADAS/SALIDAS) --- */}
+          <Modal show={showStockModal} onHide={() => setShowStockModal(false)} centered>
+            <Modal.Header closeButton className="bg-dark text-white">
+                <Modal.Title>Registrar Movimiento</Modal.Title>
+            </Modal.Header>
+            <Modal.Body className="p-4">
+                {selectedProductForStock && (
+                    <Alert variant="secondary" className="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <strong>{selectedProductForStock.nombre_comercial}</strong>
+                            <div className="small text-muted">SKU: {selectedProductForStock.sku}</div>
+                        </div>
+                        <Badge bg="dark">Stock Actual: {selectedProductForStock.stock}</Badge>
+                    </Alert>
+                )}
+                
+                <Form>
+                    <Form.Group className="mb-3">
+                        <Form.Label className="fw-bold">Tipo de Operación</Form.Label>
+                        <div className="d-flex gap-3">
+                            <Form.Check 
+                                type="radio" 
+                                id="move-in"
+                                label="🟢 ENTRADA (Compra)" 
+                                name="moveType" 
+                                checked={stockFormData.movement_type === 'IN'}
+                                onChange={() => setStockFormData({...stockFormData, movement_type: 'IN'})}
+                            />
+                            <Form.Check 
+                                type="radio" 
+                                id="move-out"
+                                label="🔴 SALIDA (Venta/Merma)" 
+                                name="moveType" 
+                                checked={stockFormData.movement_type === 'OUT'}
+                                onChange={() => setStockFormData({...stockFormData, movement_type: 'OUT'})}
+                            />
+                        </div>
+                    </Form.Group>
+
+                    <Row>
+                        <Col md={6}>
+                            <Form.Group className="mb-3">
+                                <Form.Label>Cantidad</Form.Label>
+                                <InputGroup>
+                                    <Form.Control 
+                                        type="number" 
+                                        min="1" 
+                                        value={stockFormData.quantity} 
+                                        onChange={(e) => setStockFormData({...stockFormData, quantity: e.target.value})}
+                                    />
+                                    <InputGroup.Text>u.</InputGroup.Text>
+                                </InputGroup>
+                            </Form.Group>
+                        </Col>
+                    </Row>
+
+                    <Form.Group>
+                        <Form.Label>Motivo / Razón <span className="text-danger">*</span></Form.Label>
+                        <Form.Control 
+                            as="textarea" 
+                            rows={2}
+                            placeholder="Ej: Factura #5501, Ajuste de fin de mes..."
+                            value={stockFormData.reason}
+                            onChange={(e) => setStockFormData({...stockFormData, reason: e.target.value})}
+                        />
+                    </Form.Group>
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowStockModal(false)}>Cancelar</Button>
+                <Button 
+                    variant={stockFormData.movement_type === 'IN' ? 'success' : 'danger'} 
+                    onClick={handleSubmitStockMovement}
+                >
+                    Confirmar {stockFormData.movement_type === 'IN' ? 'Entrada' : 'Salida'}
+                </Button>
             </Modal.Footer>
           </Modal>
         </>

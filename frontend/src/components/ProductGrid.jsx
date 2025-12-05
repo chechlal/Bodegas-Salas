@@ -38,7 +38,7 @@ const ProductGrid = () => {
       }
 
       const data = await response.json();
-      
+
       const productsArray = data.results || data;
       
       // Procesa los productos (como en tu versión original)
