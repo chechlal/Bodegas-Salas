@@ -59,14 +59,28 @@ export function AuthProvider({ children }) {
   };
 
   const authFetch = async (url, options = {}) => {
-    const headers = { 'Content-Type': 'application/json', ...options.headers };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const finalOptions = { ...options };
+    const headers = { ...options.headers };
 
-    const response = await fetch(`http://127.0.0.1:8000${url}`, { ...options, headers });
+    // 🚫 No forzar Content-Type si body es FormData (esto es CLAVE)
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+    }
+
+    // Token
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    finalOptions.headers = headers;
+
+    const response = await fetch(`http://127.0.0.1:8000${url}`, finalOptions);
+
     if (response.status === 401) {
       logout();
       window.location.href = '/login';
     }
+
     return response;
   };
 

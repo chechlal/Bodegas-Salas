@@ -31,6 +31,10 @@ class StandardResultSetPagination(PageNumberPagination):
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().select_related("brand", "category", "provider").prefetch_related("images")
 
+    def perform_create(self, serializer):
+        # Asigna el usuario autenticado como dueño del producto
+        serializer.save(user=self.request.user)
+
     def get_serializer_class(self):
         # Si el usuario es Staff/Admin, ve todo completo
         if self.request.user.is_staff or (hasattr(self.request.user, 'profile') and self.request.user.profile.role == 'ADMIN'):

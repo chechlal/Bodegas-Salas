@@ -1,1487 +1,897 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert, Badge, InputGroup, Toast, ToastContainer } from "react-bootstrap";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert, Badge, InputGroup, Toast, ToastContainer, Card, Tab, Tabs } from "react-bootstrap";
 import { useAuth } from "../context/AuthContext";
 
 function AdminProducts({ theme }) {
   const { authFetch } = useAuth();
   const hasLoaded = useRef(false);
 
-  useEffect(() => {
-    document.title = "Administración de Productos - xAI";
-    if (!hasLoaded.current) {
-      hasLoaded.current = true;
-      loadProducts();
-      loadOptions();
-    }
-  }, []);
-
+  // --- 1. ESTADOS DE DATOS ---
   const [products, setProducts] = useState([]);
   const [brands, setBrands] = useState([]);
   const [categories, setCategories] = useState([]);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
 
+  // --- 2. ESTADOS DE INTERFAZ, BÚSQUEDA Y ORDEN ---
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  // Estado inicial del ordenamiento
+  const defaultSort = { key: 'nombre_comercial', direction: 'asc' };
+  const [sortConfig, setSortConfig] = useState(defaultSort);
+
+  // Modals
+  const [showModal, setShowModal] = useState(false);
+  const [showStockModal, setShowStockModal] = useState(false);
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showProviderModal, setShowProviderModal] = useState(false);
 
-  // Estados para gestión de stock
-  const [showStockModal, setShowStockModal] = useState(false);
-  const [selectedProductForStock, setSelectedProductForStock] = useState(null);
-  const [stockFormData, setStockFormData] = useState({
-    quantity: 1,
-    movement_type: 'IN',
-    reason: ''
-  });
-
-  const [newBrandName, setNewBrandName] = useState("");
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newProviderName, setNewProviderName] = useState("");
-
-  const [selectedBrandId, setSelectedBrandId] = useState("");
-  const [selectedCategoryId, setSelectedCategoryId] = useState("");
-  const [selectedProviderId, setSelectedProviderId] = useState("");
-
+  // --- 3. ESTADOS DE FORMULARIOS ---
   const [formData, setFormData] = useState({});
   const [editingId, setEditingId] = useState(null);
+  
+  // Dimensiones (Objeto único)
+  const [dims, setDims] = useState({ alto: "", largo: "", ancho: "" });
 
-  const [alto, setAlto] = useState("");
-  const [largo, setLargo] = useState("");
-  const [ancho, setAncho] = useState("");
-
+  // Imágenes
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [principal, setPrincipal] = useState(null);
+  const [principalIndex, setPrincipalIndex] = useState(0); // Índice de la foto principal
 
-  const [toastConfig, setToastConfig] = useState({
-    show:false,
-    message: '',
-    variant: 'danger'
+  // Logística
+  const [selectedProductForStock, setSelectedProductForStock] = useState(null);
+  const [stockFormData, setStockFormData] = useState({ quantity: 1, movement_type: 'IN', reason: '' });
+
+  // Gestión de Maestros (Edición/Creación)
+  const [masterName, setMasterName] = useState(""); 
+  const [masterEditId, setMasterEditId] = useState("");
+  const [masterEditName, setMasterEditName] = useState("");
+
+  // --- 4. SISTEMA DE NOTIFICACIONES ---
+  const [toastConfig, setToastConfig] = useState({ show: false, message: '', variant: 'success' });
+  const [deleteConfirm, setDeleteConfirm] = useState({ 
+    show: false, entity: null, id: null, name: "", input: "", originalType: null 
   });
 
-  const showFeedback = (message, variant = 'danger') => {
-    setToastConfig({ show: true, message, variant })
+  useEffect(() => {
+    document.title = "Administración de Catálogo - Bodegas Salas";
+    if (!hasLoaded.current) {
+      hasLoaded.current = true;
+      loadAllData();
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // --- HELPERS ---
+  const showFeedback = (message, variant = 'success') => setToastConfig({ show: true, message, variant });
+  const formatPrice = (price) => new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(price || 0);
+
+  // --- FUNCIONES DE FILTRO Y RESET ---
+  const hasActiveFilters = useMemo(() => {
+    return (
+        searchTerm !== "" || 
+        filterCategory !== "" || 
+        sortConfig.key !== defaultSort.key || 
+        sortConfig.direction !== defaultSort.direction
+    );
+  }, [searchTerm, filterCategory, sortConfig, defaultSort]);
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setFilterCategory("");
+    setSortConfig(defaultSort);
   };
 
-  const [deleteConfirm, setDeleteConfirm] = useState({ entity: null, id: null, name: "", input: "" });
-
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP" }).format(price || 0);
-
-  const loadProducts = async () => {
+  // --- CARGA DE DATOS ---
+  const loadAllData = async () => {
     setLoading(true);
     try {
-      const res = await authFetch("/api/products/");
-      if (!res.ok){
-        const errorData = await res.json();
-        throw new Error(errorData.detail || "Error al cargar productos.");
-      }
+      const [prodRes, brandRes, catRes, provRes] = await Promise.all([
+        authFetch("/api/products/"),
+        authFetch("/api/brands/"),
+        authFetch("/api/categories/"),
+        authFetch("/api/providers/")
+      ]);
 
-      const data = await res.json();
-      setProducts(data.results || data);
+      if (!prodRes.ok) throw new Error("Error de conexión");
+      
+      const pData = await prodRes.json();
+      setProducts(pData.results || pData);
+      setBrands(await brandRes.json().then(d => d.results || d));
+      setCategories(await catRes.json().then(d => d.results || d));
+      setProviders(await provRes.json().then(d => d.results || d));
+
     } catch (e) {
-      console.error("Error cargando productos", e);
-      showFeedback("Mensaje de error", "danger")
+      console.error(e);
+      showFeedback("Error al cargar datos del sistema.", "danger");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadOptions = async () => {
+  const refreshProducts = async () => {
     try {
-      const [brandsRes, categoriesRes, providersRes] = await Promise.all([
-        authFetch("/api/brands/"),
-        authFetch("/api/categories/"),
-        authFetch("/api/providers/"),
-      ]);
-
-      if (!brandsRes.ok || !categoriesRes.ok || !providersRes.ok) {
-        throw new Error("Error al cargar las opciones de filtros.");
-      }
-
-      const brandsData = await brandsRes.json();
-      const categoriesData = await categoriesRes.json();
-      const providersData = await providersRes.json();
-      setBrands(brandsData.results || brandsData);
-      setCategories(categoriesData.results || categoriesData);
-      setProviders(providersData.results || providersData);
-    } catch (e) {
-      console.error("Error cargando opciones", e);
-      showFeedback("Error al cargar opciones.", "danger");
-    }
-  };
-
-  const openNewModal = () => {
-    setEditingId(null);
-    setFormData({
-      nombre_comercial: "",
-      ean: "",
-      sku: "",
-      stock: 0,
-      precio_venta: 0,
-      costo_cg: 0,
-      peso: 0,
-      rating: 0,
-      lugar_bodega: "",
-      edad_uso: "",
-      descripcion: "",
-      brand_id: "",
-      category_id: "",
-      provider_id: "",
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
-    setAlto("");
-    setLargo("");
-    setAncho("");
-    setExistingImages([]);
-    setNewImages([]);
-    setPreviews([]);
-    setPrincipal(null);
-    setShowModal(true);
-  };
-
-  const handleEdit = async (product) => {
-    setFormData({
-      ...product,
-      brand_id: product.brand?.id || "",
-      category_id: product.category?.id || "",
-      provider_id: product.provider?.id || "",
-      created_at: product.created_at ? new Date(product.created_at) : new Date(),
-      updated_at: product.updated_at ? new Date(product.updated_at) : new Date(),
-    });
-
-    const dims = (product.dimensiones || "").split("x").map(s => s.trim());
-    setAlto(dims[0] || "");
-    setLargo(dims[1] || "");
-    setAncho(dims[2] || "");
-
-    setEditingId(product.id);
-
-    try {
-      const imagesRes = await authFetch(`/api/product-images/?search=${product.id}`);
-      const imagesData = await imagesRes.json();
-      const list = imagesData.results || imagesData || [];
-      setExistingImages(list);
-      setPreviews(list.map(img => ({ kind: "existing", url: img.image, id: img.id })));
-      const principalFound = list.find(img => img.is_principal);
-      setPrincipal(principalFound ? { kind: "existing", value: principalFound.id } : null);
-    } catch (e) {
-      console.error("Error cargando imágenes", e);
-      showFeedback("Error al cargar imágenes del producto.", "danger");
-    }
-
-    setNewImages([]);
-    setShowModal(true);
-  };
-
-  const setField = (key, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [key]: value,
-      updated_at: new Date(),
-    }));
-  };
-
-  const addFiles = (files) => {
-    const arr = Array.from(files || []).filter(file => file.type.startsWith("image/") && file.size <= 5 * 1024 * 1024);
-    if (arr.length === 0) {
-      showFeedback("Por favor, seleccione archivos de imagen válidos (máximo 50MB cada uno).", "danger");
-      return;
-    }
-    const total = existingImages.length + newImages.length + arr.length;
-    const limit = 5;
-    if (total > limit) {
-      showFeedback(`Máximo ${limit} imágenes permitidas por producto.`, "danger");
-      return;
-    }
-    const newPrev = arr.map((file, idx) => ({
-      kind: "new",
-      url: URL.createObjectURL(file),
-      idx: newImages.length + idx,
-    }));
-    setNewImages(prev => [...prev, ...arr]);
-    setPreviews(prev => [...prev, ...newPrev]);
-  };
-
-  const handleRemovePreview = (pv) => {
-    if (pv.kind === "existing") {
-      setExistingImages(prev => prev.filter(img => img.id !== pv.id));
-      setPreviews(prev => prev.filter(p => !(p.kind === "existing" && p.id === pv.id)));
-      if (principal?.kind === "existing" && principal.value === pv.id) setPrincipal(null);
-    } else {
-      setNewImages(prev => prev.filter((_, i) => i !== pv.idx));
-      const rest = previews.filter(p => !(p.kind === "new" && p.idx === pv.idx));
-      const renumbered = rest.map((p, index) => (p.kind === "new" ? { ...p, idx: index } : p));
-      setPreviews(renumbered);
-      if (principal?.kind === "new" && principal.value === pv.idx) setPrincipal(null);
-    }
-  };
-
-  const handleDeleteImage = async (imageId) => {
-    try {
-      const res = await authFetch(`/api/product-images/${imageId}/`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error eliminando imagen");
-      setExistingImages(prev => prev.filter(img => img.id !== imageId));
-      setPreviews(prev => prev.filter(p => !(p.kind === "existing" && p.id === imageId)));
-      if (principal?.kind === "existing" && principal.value === imageId) setPrincipal(null);
-    } catch (e) {
-      console.error("Error eliminando imagen", e);
-      showFeedback("Error al eliminar la imagen.", "danger");
-    }
-  };
-
-  const sanitizedPayload = () => {
-    let dimensiones = "";
-    const a = parseFloat(alto);
-    const l = parseFloat(largo);
-    const an = parseFloat(ancho);
-    if (!isNaN(a) && !isNaN(l) && !isNaN(an)) {
-      dimensiones = `${a} x ${l} x ${an}`;
-    } else if (alto || largo || ancho) {
-      throw new Error("Debes completar Alto, Largo y Ancho (en cm) o dejar los tres vacíos.");
-    }
-
-    const {
-      id, brand, category, provider, images, created_at, updated_at,
-      brand_id, category_id, provider_id, ...rest
-    } = formData;
-
-    return {
-      ...rest,
-      dimensiones,
-      brand_id: brand_id || undefined,
-      category_id: category_id || undefined,
-      provider_id: provider_id || undefined,
-    };
-  };
-
-  const handleSave = async () => {
-
-    try {
-      const nums = ["precio_venta", "stock", "costo_cg", "peso", "rating"];
-      for (const k of nums) {
-        const v = formData[k];
-        if (v != null && Number(v) < 0) throw new Error("Los valores numéricos no pueden ser negativos.");
-      }
-      if (formData.rating > 5) throw new Error("El rating no puede exceder 5.");
-      const required = ["nombre_comercial", "ean", "sku", "brand_id", "category_id", "provider_id"];
-      const missing = required.filter(k => !formData[k] || formData[k] === "");
-      if (missing.length > 0) {
-        const fieldNames = missing.map(k => {
-          if (k === "nombre_comercial") return "Nombre Comercial";
-          if (k === "ean") return "EAN";
-          if (k === "sku") return "SKU";
-          if (k === "brand_id") return "Marca";
-          if (k === "category_id") return "Categoría";
-          if (k === "provider_id") return "Proveedor";
-          return k;
-        });
-        throw new Error(`Campos requeridos faltantes: ${fieldNames.join(", ")}.`);
-      }
-
-      const payload = sanitizedPayload();
-      const isEdit = Boolean(editingId);
-      const url = isEdit ? `/api/products/${editingId}/` : "/api/products/";
-      const res = await authFetch(url, {
-        method: isEdit ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(`Error guardando producto: ${JSON.stringify(errorData)}`);
-      }
-      const saved = await res.json();
-      const productId = saved.id || editingId;
-
-      for (const img of existingImages) {
-        const shouldBePrincipal = principal?.kind === "existing" && principal.value === img.id;
-        const patchRes = await authFetch(`/api/product-images/${img.id}/`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ is_principal: !!shouldBePrincipal }),
-        });
-        if (!patchRes.ok) {
-          console.warn(`Error actualizando imagen existente ${img.id}`);
-        }
-      }
-
-      let uploadErrors = 0;
-      for (let i = 0; i < newImages.length; i++) {
-          const formDataImg = new FormData();
-          formDataImg.append("image", newImages[i]);
-          formDataImg.append("product", productId);
-          const isPrincipal = principal?.kind === "new" && principal.value === i;
-          formDataImg.append("is_principal", isPrincipal ? "true" : "false");
-          try {
-              const imgRes = await authFetch("/api/product-images/", {
-                  method: "POST",
-                  body: formDataImg,
-              });
-              if (!imgRes.ok) {
-                  const errorData = await imgRes.json();
-                  showFeedback(prev => prev ? `${prev}\nError en imagen ${i + 1}: ${JSON.stringify(errorData)}` : `Error en imagen ${i + 1}: ${JSON.stringify(errorData)}`, "success");
-                  throw new Error(`Error subiendo imagen ${i + 1}`);
-              }
-          } catch (e) {
-              console.error(e);
-              uploadErrors++;
-          }
-      }
-
-      if (uploadErrors > 0) {
-        showFeedback(`Se subieron ${newImages.length - uploadErrors} de ${newImages.length} imágenes nuevas. Revisa las fallidas.`, "success");
-      }
-
-      previews.filter(p => p.kind === "new").forEach(p => URL.revokeObjectURL(p.url));
-      await loadProducts();
-      setShowModal(false);
-    } catch (e) {
-      console.error("Error en handleSave:", e);
-      showFeedback(e.message || "Error inesperado al guardar el producto.", "danger");
-    }
-  };
-
-  const handleSaveBrand = async () => {
-    if (!newBrandName.trim()) {
-      showFeedback("El nombre de la marca es requerido.", "danger");
-      return;
-    }
-    try {
-      const res = await authFetch("/api/brands/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newBrandName }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(`Error guardando marca: ${JSON.stringify(errorData)}`);
-      }
-      setNewBrandName("");
-      setSelectedBrandId("");
-      setShowBrandModal(false);
-      await loadOptions();
-    } catch (e) {
-      showFeedback(e.message || "Error al guardar la marca.", "danger");
-    }
-  };
-
-  const handleSaveCategory = async () => {
-    if (!newCategoryName.trim()) {
-      showFeedback("El nombre de la categoría es requerido.", "danger");
-      return;
-    }
-    try {
-      const res = await authFetch("/api/categories/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCategoryName }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(`Error guardando categoría: ${JSON.stringify(errorData)}`);
-      }
-      setNewCategoryName("");
-      setSelectedCategoryId("");
-      setShowCategoryModal(false);
-      await loadOptions();
-    } catch (e) {
-      showFeedback(e.message || "Error al guardar la categoría.", "danger");
-    }
-  };
-
-  const handleSaveProvider = async () => {
-    if (!newProviderName.trim()) {
-      showFeedback("El nombre del proveedor es requerido.", "danger");
-      return;
-    }
-    try {
-      const res = await authFetch("/api/providers/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newProviderName }),
-      });
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(`Error guardando proveedor: ${JSON.stringify(errorData)}`);
-      }
-      setNewProviderName("");
-      setSelectedProviderId("");
-      setShowProviderModal(false);
-      await loadOptions();
-    } catch (e) {
-      showFeedback(e.message || "Error al guardar el proveedor.", "danger");
-    }
-  };
-
-  const checkAssociatedProducts = async (entityType, entityId, entityName) => {
-    try {
-      // Adjust query param to match backend convention (e.g., ?brand=1 instead of ?brand_id=1)
-      const res = await authFetch(`/api/products/?${entityType}=${entityId}`);
+      const res = await authFetch("/api/products/");
       const data = await res.json();
-      const productsList = data.results || data;
-      return productsList.length > 0 ? productsList : null;
-    } catch (e) {
-      console.error(`Error verificando productos asociados a ${entityType}`, e);
-      showFeedback(`Error al verificar productos asociados a ${entityType}.`, "danger");
-      return null;
-    }
+      setProducts(data.results || data);
+    } catch(e) { console.error(e); }
   };
 
-  const handleDeleteBrand = async () => {
-    const brandId = selectedBrandId;
-    if (!brandId) {
-      showFeedback("Por favor, seleccione una marca para eliminar.", "danger");
-      return;
-    }
-
-    const brand = brands.find(b => b.id === parseInt(brandId));
-    if (!brand) {
-      showFeedback("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    const associatedProducts = await checkAssociatedProducts("brand", brandId, brand.name);
-    if (associatedProducts) {
-      if (window.confirm(`Existen ${associatedProducts.length} productos asociados a la marca "${brand.name}". ¿Desea eliminarlos junto con la marca?`)) {
-        setDeleteConfirm({ entity: "marca", id: brandId, name: brand.name, input: "" });
-        return;
-      }
-      showFeedback("No se puede eliminar la marca mientras haya productos asociados.", "success");
-      return;
-    }
-
+  const refreshOptions = async () => {
     try {
-      const res = await authFetch(`/api/brands/${brandId}/`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error al eliminar la marca.");
-      setBrands(prev => prev.filter(b => b.id !== parseInt(brandId)));
-      setProducts(prev => prev.map(p => p.brand_id === parseInt(brandId) ? { ...p, brand: null } : p));
-      setFormData(prev => ({ ...prev, brand_id: prev.brand_id === parseInt(brandId) ? "" : prev.brand_id }));
-      setSelectedBrandId("");
-      showFeedback("Marca eliminada exitosamente.", "success");
-    } catch (e) {
-      console.error("Error eliminando marca", e);
-      showFeedback("Error al eliminar la marca.", "danger");
-    }
-  };
-
-  const handleDeleteCategory = async () => {
-    const categoryId = selectedCategoryId;
-    if (!categoryId) {
-      showFeedback("Por favor, seleccione una categoría para eliminar.", "danger");
-      return;
-    }
-
-    const category = categories.find(c => c.id === parseInt(categoryId));
-    if (!category) {
-      showFeedback("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    const associatedProducts = await checkAssociatedProducts("category", categoryId, category.name);
-    if (associatedProducts) {
-      if (window.confirm(`Existen ${associatedProducts.length} productos asociados a la categoría "${category.name}". ¿Desea eliminarlos junto con la categoría?`)) {
-        setDeleteConfirm({ entity: "categoría", id: categoryId, name: category.name, input: "" });
-        return;
-      }
-      showFeedback("No se puede eliminar la categoría mientras haya productos asociados.", "success");
-      return;
-    }
-
-    try {
-      const res = await authFetch(`/api/categories/${categoryId}/`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error al eliminar la categoría.");
-      setCategories(prev => prev.filter(c => c.id !== parseInt(categoryId)));
-      setProducts(prev => prev.map(p => p.category_id === parseInt(categoryId) ? { ...p, category: null } : p));
-      setFormData(prev => ({ ...prev, category_id: prev.category_id === parseInt(categoryId) ? "" : prev.category_id }));
-      setSelectedCategoryId("");
-      showFeedback("Categoría eliminada exitosamente.", "success");
-    } catch (e) {
-      console.error("Error eliminando categoría", e);
-      showFeedback("Error al eliminar la categoría.", "danger");
-    }
-  };
-
-  const handleDeleteProvider = async () => {
-    const providerId = selectedProviderId;
-    if (!providerId) {
-      showFeedback("Por favor, seleccione un proveedor para eliminar.", "danger");
-      return;
-    }
-
-    const provider = providers.find(p => p.id === parseInt(providerId));
-    if (!provider) {
-      showFeedback("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    const associatedProducts = await checkAssociatedProducts("provider", providerId, provider.name);
-    if (associatedProducts) {
-      if (window.confirm(`Existen ${associatedProducts.length} productos asociados al proveedor "${provider.name}". ¿Desea eliminarlos junto con el proveedor?`)) {
-        setDeleteConfirm({ entity: "proveedor", id: providerId, name: provider.name, input: "" });
-        return;
-      }
-      showFeedback("No se puede eliminar el proveedor mientras haya productos asociados.", "success");
-      return;
-    }
-
-    try {
-      const res = await authFetch(`/api/providers/${providerId}/`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Error al eliminar el proveedor.");
-      setProviders(prev => prev.filter(p => p.id !== parseInt(providerId)));
-      setProducts(prev => prev.map(p => p.provider_id === parseInt(providerId) ? { ...p, provider: null } : p));
-      setFormData(prev => ({ ...prev, provider_id: prev.provider_id === parseInt(providerId) ? "" : prev.provider_id }));
-      setSelectedProviderId("");
-      showFeedback("Proveedor eliminado exitosamente.", "success");
-    } catch (e) {
-      console.error("Error eliminando proveedor", e);
-      showFeedback("Error al eliminar el proveedor.", "danger");
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    const { entity, id, name, input } = deleteConfirm;
-    const expectedInput = `eliminar productos con ${entity} "${name}"`;
-    if (input !== expectedInput) {
-      showFeedback(`Debe escribir exactamente "${expectedInput}" para confirmar la eliminación.`, "danger");
-      return;
-    }
-
-    try {
-      let res;
-      if (entity === "marca") {
-        res = await authFetch(`/api/brands/${id}/`, { method: "DELETE" });
-        await Promise.all(products.filter(p => p.brand_id === id).map(p =>
-          authFetch(`/api/products/${p.id}/`, { method: "DELETE" })
-        ));
-        setBrands(prev => prev.filter(b => b.id !== id));
-        setProducts(prev => prev.filter(p => p.brand_id !== id));
-        setFormData(prev => ({ ...prev, brand_id: prev.brand_id === id ? "" : prev.brand_id }));
-      } else if (entity === "categoría") {
-        res = await authFetch(`/api/categories/${id}/`, { method: "DELETE" });
-        await Promise.all(products.filter(p => p.category_id === id).map(p =>
-          authFetch(`/api/products/${p.id}/`, { method: "DELETE" })
-        ));
-        setCategories(prev => prev.filter(c => c.id !== id));
-        setProducts(prev => prev.filter(p => p.category_id !== id));
-        setFormData(prev => ({ ...prev, category_id: prev.category_id === id ? "" : prev.category_id }));
-      } else if (entity === "proveedor") {
-        res = await authFetch(`/api/providers/${id}/`, { method: "DELETE" });
-        await Promise.all(products.filter(p => p.provider_id === id).map(p =>
-          authFetch(`/api/products/${p.id}/`, { method: "DELETE" })
-        ));
-        setProviders(prev => prev.filter(p => p.id !== id));
-        setProducts(prev => prev.filter(p => p.provider_id !== id));
-        setFormData(prev => ({ ...prev, provider_id: prev.provider_id === id ? "" : prev.provider_id }));
-      }
-
-      if (!res.ok) throw new Error(`Error al eliminar el ${entity}.`);
-      setDeleteConfirm({ entity: null, id: null, name: "", input: "" });
-      showFeedback(`${entity.charAt(0).toUpperCase() + entity.slice(1)} y productos asociados eliminados exitosamente.`, "success");
-    } catch (e) {
-      console.error(`Error eliminando ${entity}`, e);
-      showFeedback(`Error al eliminar el ${entity} y sus productos.`, "danger");
-    }
-  };
-
-  const handleUpdateBrand = async () => {
-    const brandId = selectedBrandId;
-    if (!brandId || !newBrandName.trim()) {
-      showFeedback("Por favor, seleccione una marca y proporcione un nuevo nombre.", "danger");
-      return;
-    }
-
-    const brand = brands.find(b => b.id === parseInt(brandId));
-    if (!brand) {
-      showFeedback("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    try {
-      const res = await authFetch(`/api/brands/${brandId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newBrandName }),
-      });
-      if (!res.ok) throw new Error("Error al actualizar la marca.");
-      const updatedProducts = products.map(p =>
-        p.brand_id === parseInt(brandId) ? { ...p, brand: { id: brandId, name: newBrandName } } : p
-      );
-      setProducts(updatedProducts);
-      setBrands(prev => prev.map(b => b.id === parseInt(brandId) ? { ...b, name: newBrandName } : b));
-      setNewBrandName("");
-      setSelectedBrandId("");
-      showFeedback("Marca y productos asociados actualizados exitosamente.", "success");
-      await loadOptions();
-    } catch (e) {
-      console.error("Error actualizando marca", e);
-      showFeedback("Error al actualizar la marca.", "danger");
-    }
-  };
-
-  const handleUpdateCategory = async () => {
-    const categoryId = selectedCategoryId;
-    if (!categoryId || !newCategoryName.trim()) {
-      showFeedback("Por favor, seleccione una categoría y proporcione un nuevo nombre.", "danger");
-      return;
-    }
-
-    const category = categories.find(c => c.id === parseInt(categoryId));
-    if (!category) {
-      showFeedback("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    try {
-      const res = await authFetch(`/api/categories/${categoryId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newCategoryName }),
-      });
-      if (!res.ok) throw new Error("Error al actualizar la categoría.");
-      const updatedProducts = products.map(p =>
-        p.category_id === parseInt(categoryId) ? { ...p, category: { id: categoryId, name: newCategoryName } } : p
-      );
-      setProducts(updatedProducts);
-      setCategories(prev => prev.map(c => c.id === parseInt(categoryId) ? { ...c, name: newCategoryName } : c));
-      setNewCategoryName("");
-      setSelectedCategoryId("");
-      showFeedback("Categoría y productos asociados actualizados exitosamente.", "success");
-      await loadOptions();
-    } catch (e) {
-      console.error("Error actualizando categoría", e);
-      showFeedback("Error al actualizar la categoría.", "danger");
-    }
-  };
-
-  const handleUpdateProvider = async () => {
-    const providerId = selectedProviderId;
-    if (!providerId || !newProviderName.trim()) {
-      showFeedback("Por favor, seleccione un proveedor y proporcione un nuevo nombre.", "danger");
-      return;
-    }
-
-    const provider = providers.find(p => p.id === parseInt(providerId));
-    if (!provider) {
-      showFeedback("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.", "danger");
-      return;
-    }
-
-    try {
-      const res = await authFetch(`/api/providers/${providerId}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newProviderName }),
-      });
-      if (!res.ok) throw new Error("Error al actualizar el proveedor.");
-      const updatedProducts = products.map(p =>
-        p.provider_id === parseInt(providerId) ? { ...p, provider: { id: providerId, name: newProviderName } } : p
-      );
-      setProducts(updatedProducts);
-      setProviders(prev => prev.map(p => p.id === parseInt(providerId) ? { ...p, name: newProviderName } : p));
-      setNewProviderName("");
-      setSelectedProviderId("");
-      showFeedback("Proveedor y productos asociados actualizados exitosamente.", "success");
-      await loadOptions();
-    } catch (e) {
-      console.error("Error actualizando proveedor", e);
-      showFeedback("Error al actualizar el proveedor.", "danger");
-    }
-  };
-
-  const handleDelete = async (productId) => {
-    if (window.confirm("¿Está seguro de que desea eliminar este producto?")) {
-      try {
-        const res = await authFetch(`/api/products/${productId}/`, { method: "DELETE" });
-        if (!res.ok) throw new Error("Error al eliminar el producto.");
-        setProducts(prev => prev.filter(product => product.id !== productId));
-        showFeedback("Producto eliminado exitosamente.", "success");
-      } catch (e) {
-        console.error("Error eliminando producto", e);
-        showFeedback("Error al eliminar el producto.", "danger");
-      }
-    }
-  };
-
-  const handleOpenStockModal = (product) => {
-    setSelectedProductForStock(product);
-    setStockFormData({ quantity: 1, movement_type: 'IN', reason: '' });
-    setShowStockModal(true);
+        const [brandRes, catRes, provRes] = await Promise.all([
+            authFetch("/api/brands/"),
+            authFetch("/api/categories/"),
+            authFetch("/api/providers/")
+        ]);
+        setBrands(await brandRes.json().then(d => d.results || d));
+        setCategories(await catRes.json().then(d => d.results || d));
+        setProviders(await provRes.json().then(d => d.results || d));
+    } catch(e) { console.error(e); }
   }
 
-  const handleSubmitStockMovement = async () => {
-
-    // Validaciones básicas de UI
-    if (stockFormData.quantity <= 0) {
-      showFeedback("La cantidad debe ser mayir a 0.", "danger")
-      return;
+  // --- ORDENAMIENTO ---
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
     }
-    if (!stockFormData.reason.trim()) {
-      showFeedback("Debe indicar una razón para el movimiento (ej: Compra, Merma, Ajuste).", "danger");
-      return;
+    setSortConfig({ key, direction });
+  };
+
+  const getSortedProducts = (productsList) => {
+      const sorted = [...productsList];
+      sorted.sort((a, b) => {
+        let aVal = a[sortConfig.key];
+        let bVal = b[sortConfig.key];
+
+        // Objetos
+        if (sortConfig.key === 'brand') { aVal = a.brand?.name || ''; bVal = b.brand?.name || ''; }
+        if (sortConfig.key === 'category') { aVal = a.category?.name || ''; bVal = b.category?.name || ''; }
+        if (sortConfig.key === 'provider') { aVal = a.provider?.name || ''; bVal = b.provider?.name || ''; }
+        
+        // Conversión Numérica para ordenamiento correcto
+        if (['precio_venta', 'stock', 'rating', 'costo_cg'].includes(sortConfig.key)) {
+            const cleanNumber = (val) => parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+            aVal = cleanNumber(aVal);
+            bVal = cleanNumber(bVal);
+        } else {
+            aVal = String(aVal).toLowerCase();
+            bVal = String(bVal).toLowerCase();
+        }
+
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+      return sorted;
+    };
+
+  // --- FILTRADO + ORDENAMIENTO ---
+  const processedProducts = useMemo(() => {
+    let result = products;
+
+    if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        result = result.filter(p => 
+            p.nombre_comercial.toLowerCase().includes(term) ||
+            p.sku.toLowerCase().includes(term) ||
+            p.brand?.name?.toLowerCase().includes(term)
+        );
+    }
+    if (filterCategory) {
+        result = result.filter(p => p.category?.id === parseInt(filterCategory));
     }
 
+    return getSortedProducts(result);
+  }, [products, searchTerm, filterCategory, sortConfig]); // eslint-disable-line react-hooks/exhaustive-deps
+
+
+  // --- CRUD PRODUCTOS ---
+  const openProductModal = (product = null) => {
+      // Resetear estados visuales
+      setNewImages([]);
+      setPreviews([]);
+      setPrincipalIndex(0); 
+
+      if (product) {
+          setEditingId(product.id);
+          setFormData({
+              ...product,
+              brand_id: product.brand?.id || "",
+              category_id: product.category?.id || "",
+              provider_id: product.provider?.id || "",
+          });
+          
+          // Parsear dimensiones
+          const d = (product.dimensiones || "").split("x").map(s => s.trim());
+          setDims({ alto: d[0] || "", largo: d[1] || "", ancho: d[2] || "" });
+
+          // Cargar imágenes
+          authFetch(`/api/product-images/?search=${product.id}`)
+              .then(r => r.json())
+              .then(data => {
+                  const imgs = data.results || data || [];
+                  setExistingImages(imgs);
+                  
+                  // Configurar previews
+                  const initialPreviews = imgs.map(img => ({ 
+                      kind: 'existing', 
+                      url: img.image, 
+                      id: img.id, 
+                      is_principal: img.is_principal 
+                  }));
+                  setPreviews(initialPreviews);
+                  
+                  // Detectar índice de la principal
+                  const pIndex = initialPreviews.findIndex(p => p.is_principal);
+                  setPrincipalIndex(pIndex >= 0 ? pIndex : 0);
+              });
+      } else {
+          // MODO CREACIÓN
+          setEditingId(null);
+          setFormData({
+              nombre_comercial: "", ean: "", sku: "", stock: 0, precio_venta: 0, costo_cg: 0, rating: 0,
+              brand_id: "", category_id: "", provider_id: "", descripcion: "", lugar_bodega: "", edad_uso: "", peso: 0
+          });
+          setDims({ alto: "", largo: "", ancho: "" });
+          setPrincipalIndex(0);
+      }
+      setShowModal(true);
+    };
+
+  const handleSaveProduct = async () => {
     try {
-      const payload = {
-        product: selectedProductForStock.id,
-        quantity: parseInt(stockFormData.quantity),
-        movement_type: stockFormData.movement_type,
-        reason: stockFormData.reason
-      };
+        setSaving(true);
+        if (!formData.nombre_comercial || !formData.sku || !formData.brand_id) {
+            setSaving(false);
+            return showFeedback("Complete los campos obligatorios (*)", "warning");
+        }
 
-      const res = await authFetch('/api/movements/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        let dimensiones = "";
+        if (dims.alto && dims.largo && dims.ancho) {
+            dimensiones = `${dims.alto} x ${dims.largo} x ${dims.ancho}`;
+        }
+
+        const payload = {
+            ...formData,
+            dimensiones,
+            brand_id: formData.brand_id,
+            category_id: formData.category_id,
+            provider_id: formData.provider_id,
+        };
+        
+        ['stock', 'brand', 'category', 'provider', 'images'].forEach(k => delete payload[k]);
+
+        const url = editingId ? `/api/products/${editingId}/` : "/api/products/";
+        const method = editingId ? "PATCH" : "POST";
+
+        const res = await authFetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-            const errData = await res.json();
-            const msg = errData.detail || (errData.quantity && errData.quantity[0]) || "Error al registrar movimiento";
-            throw new Error(msg);
+        if (!res.ok) throw new Error("Error al guardar producto");
+        
+        const savedProd = await res.json();
+        const prodId = savedProd.id;
+
+        // --- GUARDADO DE IMÁGENES ---
+        for (let i = 0; i < previews.length; i++) {
+            const pv = previews[i];
+            const isMain = (i === principalIndex); 
+
+            if (pv.kind === 'existing') {
+                if (pv.is_principal !== isMain) {
+                    await authFetch(`/api/product-images/${pv.id}/`, {
+                        method: "PATCH", 
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ is_principal: isMain })
+                    });
+                }
+            } else if (pv.kind === 'new') {
+                const fd = new FormData();
+                fd.append("image", pv.file);
+                fd.append("product", prodId);
+                fd.append("is_principal", isMain ? "true" : "false");
+                await authFetch("/api/product-images/", { method: "POST", body: fd });
+            }
         }
 
-        showFeedback("✅ Movimiento registrado correctamente. Stock actualizado.", "success");
-        setShowStockModal(false);
-        await loadProducts();
+        showFeedback(editingId ? "Producto actualizado." : "Producto creado.", "success");
+        setShowModal(false);
+        refreshProducts();
+
     } catch (e) {
-        console.error(e);
         showFeedback(e.message, "danger");
+    } finally {
+        setSaving(false);
     }
   };
 
-  const createdAtStr = formData.created_at?.toLocaleString() || "";
-  const updatedAtStr = formData.updated_at?.toLocaleString() || "";
+  // Manejo de Imágenes (Preview y Borrado)
+  const handleFileChange = (e) => {
+      const files = Array.from(e.target.files);
+      setNewImages(prev => [...prev, ...files]);
+      const newPrevs = files.map(f => ({ kind: 'new', url: URL.createObjectURL(f), file: f }));
+      setPreviews(prev => [...prev, ...newPrevs]);
+  };
+
+  const removePreview = (index) => {
+      const item = previews[index];
+      if (item.kind === 'existing') {
+          setExistingImages(prev => prev.filter(img => img.id !== item.id));
+          authFetch(`/api/product-images/${item.id}/`, { method: "DELETE" });
+      } else {
+          setNewImages(prev => prev.filter(f => f !== item.file));
+      }
+      setPreviews(prev => prev.filter((_, i) => i !== index));
+      if (index === principalIndex) setPrincipalIndex(0);
+      else if (index < principalIndex) setPrincipalIndex(principalIndex - 1);
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm("¿Confirmar eliminación definitiva del producto?")) {
+        try {
+            const res = await authFetch(`/api/products/${id}/`, { method: "DELETE" });
+            if (!res.ok) throw new Error("No se pudo eliminar");
+            showFeedback("Producto eliminado.", "success");
+            setProducts(prev => prev.filter(p => p.id !== id));
+        } catch(e) {
+            showFeedback("Error al eliminar producto", "danger");
+        }
+    }
+  };
+
+  // --- CRUD MAESTROS ---
+  const openMasterModal = (type) => {
+      setMasterName("");
+      setMasterEditId("");
+      setMasterEditName("");
+      if (type === 'brand') setShowBrandModal(true);
+      if (type === 'category') setShowCategoryModal(true);
+      if (type === 'provider') setShowProviderModal(true);
+  };
+
+  const handleSaveMaster = async (type) => {
+      if (!masterName.trim()) return showFeedback("El nombre no puede estar vacío", "warning");
+      const endpoint = type === 'brand' ? 'brands' : type === 'category' ? 'categories' : 'providers';
+      try {
+          const res = await authFetch(`/api/${endpoint}/`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: masterName })
+          });
+          if (!res.ok) throw new Error("Error al crear");
+          showFeedback("Registro creado exitosamente", "success");
+          setMasterName("");
+          refreshOptions();
+      } catch (e) { showFeedback("Error al guardar", "danger"); }
+  };
+
+  const handleUpdateMaster = async (type) => {
+      if (!masterEditId || !masterEditName.trim()) return showFeedback("Seleccione un registro e ingrese un nombre", "warning");
+      const endpoint = type === 'brand' ? 'brands' : type === 'category' ? 'categories' : 'providers';
+      try {
+          const res = await authFetch(`/api/${endpoint}/${masterEditId}/`, {
+              method: "PATCH", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: masterEditName })
+          });
+          if (!res.ok) throw new Error("Error al actualizar");
+          showFeedback("Registro actualizado", "success");
+          setMasterEditName("");
+          setMasterEditId("");
+          refreshOptions();
+          refreshProducts();
+      } catch (e) { showFeedback("Error al actualizar", "danger"); }
+  };
+
+  const handleDeleteMasterAttempt = async (type) => {
+      if (!masterEditId) return showFeedback("Seleccione un elemento para eliminar", "warning");
+      
+      const list = type === 'brand' ? brands : type === 'category' ? categories : providers;
+      const item = list.find(x => x.id === parseInt(masterEditId));
+      
+      const param = type === 'brand' ? 'brand' : type === 'category' ? 'category' : 'provider';
+      const res = await authFetch(`/api/products/?${param}=${masterEditId}`);
+      const associated = await res.json();
+      const count = (associated.results || associated).length;
+
+      if (count > 0) {
+          setShowBrandModal(false); setShowCategoryModal(false); setShowProviderModal(false);
+          setDeleteConfirm({
+              show: true,
+              entity: type === 'brand' ? 'Marca' : type === 'category' ? 'Categoría' : 'Proveedor',
+              id: parseInt(masterEditId),
+              name: item.name,
+              input: "",
+              originalType: type
+          });
+      } else {
+          const endpoint = type === 'brand' ? 'brands' : type === 'category' ? 'categories' : 'providers';
+          await authFetch(`/api/${endpoint}/${masterEditId}/`, { method: "DELETE" });
+          showFeedback("Eliminado correctamente", "success");
+          setMasterEditId("");
+          setMasterEditName("");
+          refreshOptions();
+      }
+  };
+
+  const executeCascadingDelete = async () => {
+      const { id, originalType, input, entity, name } = deleteConfirm;
+      const expected = `eliminar productos con ${entity} "${name}"`;
+
+      if (input !== expected) return showFeedback("La frase de confirmación no coincide", "danger");
+
+      try {
+          const param = originalType === 'brand' ? 'brand' : originalType === 'category' ? 'category' : 'provider';
+          const res = await authFetch(`/api/products/?${param}=${id}`);
+          const data = await res.json();
+          const toDelete = data.results || data;
+
+          for (const p of toDelete) {
+              await authFetch(`/api/products/${p.id}/`, { method: "DELETE" });
+          }
+
+          const endpoint = originalType === 'brand' ? 'brands' : originalType === 'category' ? 'categories' : 'providers';
+          const finalRes = await authFetch(`/api/${endpoint}/${id}/`, { method: "DELETE" });
+          
+          if (!finalRes.ok) throw new Error("Error final al borrar");
+
+          showFeedback(`Limpieza completa: ${entity} y productos asociados eliminados.`, "success");
+          setDeleteConfirm({ ...deleteConfirm, show: false });
+          loadAllData();
+
+      } catch (e) {
+          showFeedback("Error crítico durante la eliminación", "danger");
+      }
+  };
+
+  // --- LOGÍSTICA ---
+  const handleStockClick = (product) => {
+      setSelectedProductForStock(product);
+      setStockFormData({ quantity: 1, movement_type: 'IN', reason: '' });
+      setShowStockModal(true);
+  };
+
+  const submitStock = async () => {
+      if (!stockFormData.reason.trim()) return showFeedback("El motivo es obligatorio para auditoría", "warning");
+      try {
+          const res = await authFetch('/api/movements/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  product: selectedProductForStock.id,
+                  quantity: parseInt(stockFormData.quantity),
+                  movement_type: stockFormData.movement_type,
+                  reason: stockFormData.reason
+              })
+          });
+
+          if (!res.ok) {
+              const err = await res.json();
+              const msg = err.quantity ? err.quantity[0] : 
+                          (err.detail || err.non_field_errors?.[0] || "Error al registrar movimiento");
+              throw new Error(msg);
+          }
+          
+          showFeedback("Stock actualizado exitosamente", "success");
+          setShowStockModal(false);
+          refreshProducts();
+      } catch (e) { showFeedback(e.message, "danger"); }
+  };
+
+  // --- RENDER ---
+  const dark = theme === 'dark';
+  const inputClass = dark ? "bg-dark text-white border-secondary" : "";
+  const cardClass = dark ? 'bg-dark text-white border-secondary' : 'bg-white border-0 shadow-sm';
+  const tableHeaderClass = dark ? "table-secondary" : "bg-light text-secondary";
+
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <i className="bi bi-arrow-down-up text-muted ms-1" style={{fontSize: '0.8em'}}></i>;
+    return sortConfig.direction === 'asc' 
+      ? <i className="bi bi-sort-down-alt text-primary ms-1"></i>
+      : <i className="bi bi-sort-up text-primary ms-1"></i>;
+  };
 
   return (
-    <div className="container mt-5 p-5 bg-body rounded-3 shadow-lg">
-      {loading ? (
-        <div className="text-center">
-          <Spinner animation="border" />
-          <p>Cargando productos...</p>
-        </div>
-      ) : (
-        <>
-
-          <div className="mb-4">
-            <Button variant="outline-primary" className="me-2" onClick={() => { setNewBrandName(""); setShowBrandModal(true); setSelectedBrandId(""); }}>
-              Administrar Marcas
-            </Button>
-            <Button variant="outline-primary" className="me-2" onClick={() => { setNewCategoryName(""); setShowCategoryModal(true); setSelectedCategoryId(""); }}>
-              Administrar Categorías
-            </Button>
-            <Button variant="outline-primary" onClick={() => { setNewProviderName(""); setShowProviderModal(true); setSelectedProviderId(""); }}>
-              Administrar Proveedores
-            </Button>
-          </div>
-
-          <Modal show={showBrandModal} onHide={() => { setShowBrandModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>Administrar Marcas</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Agregar Nueva Marca</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={newBrandName}
-                  onChange={(e) => setNewBrandName(e.target.value)}
-                  placeholder="Ej: Nike"
-                />
-              </Form.Group>
-              <Form.Group className="mb-3">
-                <Form.Label>Seleccionar Marca para Modificar o Eliminar</Form.Label>
-                <Form.Select
-                  value={selectedBrandId}
-                  onChange={(e) => setSelectedBrandId(e.target.value)}
-                >
-                  <option value="">Seleccione una marca</option>
-                  {brands.map((brand) => (
-                    <option key={brand.id} value={brand.id}>
-                      {brand.name}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-              {selectedBrandId && (
-                <Form.Group className="mb-3">
-                  <Form.Label>Nuevo Nombre de la Marca</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={newBrandName}
-                    onChange={(e) => setNewBrandName(e.target.value)}
-                    placeholder="Ingrese nuevo nombre"
-                  />
-                </Form.Group>
-              )}
-              <div className="d-flex flex-column">
-                <div className="mb-2">
-                  <Button variant="primary" className="me-3" onClick={handleSaveBrand} disabled={!newBrandName.trim()}>
-                    Guardar Nueva Marca
-                  </Button>
+    <div className={`container-fluid p-4 ${dark ? 'bg-black' : 'bg-light'} min-vh-100`}>
+      
+      {/* 1. BARRA DE CONTROL SUPERIOR */}
+      <Card className={`mb-4 ${cardClass}`}>
+        <Card.Body className="d-flex flex-column flex-xl-row justify-content-between align-items-center gap-3 py-3">
+            <div>
+                <h4 className="fw-bold mb-0 d-flex align-items-center">
+                    <i className="bi bi-grid-3x3-gap-fill me-2 text-primary"></i> 
+                    Administración de Catálogo
+                </h4>
+                <div className="text-muted small">
+                    {products.length} productos • {brands.length} marcas • {categories.length} categorías
                 </div>
-                {selectedBrandId && (
-                  <div className="mb-2">
-                    <Button variant="success" className="me-3" onClick={handleUpdateBrand} disabled={!newBrandName.trim()}>
-                      Modificar Marca
-                    </Button>
-                    <Button variant="danger" onClick={handleDeleteBrand}>
-                      Eliminar Marca
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => { setShowBrandModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }}>Cerrar</Button>
-            </Modal.Footer>
-          </Modal>
+            </div>
 
-          <Modal show={showCategoryModal} onHide={() => { setShowCategoryModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>Administrar Categorías</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Agregar Nueva Categoría</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="Ej: Electrónicos"
-                />
-              </Form.Group>
-              <Form.Group className="mb-3">
-                <Form.Label>Seleccionar Categoría para Modificar o Eliminar</Form.Label>
-                <Form.Select
-                  value={selectedCategoryId}
-                  onChange={(e) => setSelectedCategoryId(e.target.value)}
+            <div className="d-flex flex-column flex-md-row gap-2 w-100 w-xl-auto align-items-center">
+                {/* Buscador */}
+                <InputGroup style={{minWidth: '280px'}}>
+                    <InputGroup.Text className={dark ? "bg-secondary border-secondary text-white" : "bg-light"}>
+                        <i className="bi bi-search"></i>
+                    </InputGroup.Text>
+                    <Form.Control 
+                        placeholder="Buscar..."
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        className={dark ? "bg-dark text-white border-secondary" : ""}
+                    />
+                </InputGroup>
+
+                {/* Filtro Rápido */}
+                <Form.Select 
+                    className={dark ? "bg-dark text-white border-secondary" : ""}
+                    style={{maxWidth: '200px'}}
+                    value={filterCategory}
+                    onChange={e => setFilterCategory(e.target.value)}
                 >
-                  <option value="">Seleccione una categoría</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
+                    <option value="">Todas las Categorías</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Form.Select>
-              </Form.Group>
-              {selectedCategoryId && (
-                <Form.Group className="mb-3">
-                  <Form.Label>Nuevo Nombre de la Categoría</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={newCategoryName}
-                    onChange={(e) => setNewCategoryName(e.target.value)}
-                    placeholder="Ingrese nuevo nombre"
-                  />
-                </Form.Group>
-              )}
-              <div className="d-flex flex-column">
-                <div className="mb-2">
-                  <Button variant="primary" className="me-3" onClick={handleSaveCategory} disabled={!newCategoryName.trim()}>
-                    Guardar Nueva Categoría
-                  </Button>
-                </div>
-                {selectedCategoryId && (
-                  <div className="mb-2">
-                    <Button variant="success" className="me-3" onClick={handleUpdateCategory} disabled={!newCategoryName.trim()}>
-                      Modificar Categoría
+
+                {/* Botón RESET FILTROS */}
+                {hasActiveFilters && (
+                    <Button 
+                        variant="outline-danger" 
+                        onClick={clearAllFilters} 
+                        title="Limpiar Búsqueda, Filtros y Orden"
+                    >
+                        <i className="bi bi-x-lg"></i>
                     </Button>
-                    <Button variant="danger" onClick={handleDeleteCategory}>
-                      Eliminar Categoría
-                    </Button>
-                  </div>
                 )}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => { setShowCategoryModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }}>Cerrar</Button>
-            </Modal.Footer>
-          </Modal>
 
-          <Modal show={showProviderModal} onHide={() => { setShowProviderModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>Administrar Proveedores</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <Form.Group className="mb-3">
-                <Form.Label>Agregar Nuevo Proveedor</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={newProviderName}
-                  onChange={(e) => setNewProviderName(e.target.value)}
-                  placeholder="Ej: Proveedor XYZ"
-                />
-              </Form.Group>
-              <Form.Group className="mb-3">
-                <Form.Label>Seleccionar Proveedor para Modificar o Eliminar</Form.Label>
-                <Form.Select
-                  value={selectedProviderId}
-                  onChange={(e) => setSelectedProviderId(e.target.value)}
-                >
-                  <option value="">Seleccione un proveedor</option>
-                  {providers.map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.name}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-              {selectedProviderId && (
-                <Form.Group className="mb-3">
-                  <Form.Label>Nuevo Nombre del Proveedor</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={newProviderName}
-                    onChange={(e) => setNewProviderName(e.target.value)}
-                    placeholder="Ingrese nuevo nombre"
-                  />
-                </Form.Group>
-              )}
-              <div className="d-flex flex-column">
-                <div className="mb-2">
-                  <Button variant="primary" className="me-3" onClick={handleSaveProvider} disabled={!newProviderName.trim()}>
-                    Guardar Nuevo Proveedor
-                  </Button>
-                </div>
-                {selectedProviderId && (
-                  <div className="mb-2">
-                    <Button variant="success" className="me-3" onClick={handleUpdateProvider} disabled={!newProviderName.trim()}>
-                      Modificar Proveedor
-                    </Button>
-                    <Button variant="danger" onClick={handleDeleteProvider}>
-                      Eliminar Proveedor
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => { setShowProviderModal(false); setDeleteConfirm({ entity: null, id: null, name: "", input: "" }); }}>Cerrar</Button>
-            </Modal.Footer>
-          </Modal>
-
-          <Modal show={deleteConfirm.entity} onHide={() => setDeleteConfirm({ entity: null, id: null, name: "", input: "" })} centered>
-            <Modal.Header closeButton>
-              <Modal.Title>Confirmar Eliminación</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <p>Existen productos asociados a esta {deleteConfirm.entity}. Para eliminarla junto con todos los productos, escriba exactamente: "<strong>{`eliminar productos con ${deleteConfirm.entity} "${deleteConfirm.name}"`}</strong>"</p>
-              <Form.Group>
-                <Form.Control
-                  type="text"
-                  value={deleteConfirm.input}
-                  onChange={(e) => setDeleteConfirm(prev => ({ ...prev, input: e.target.value }))}
-                  placeholder={`Escriba "eliminar productos con ${deleteConfirm.entity} "${deleteConfirm.name}"`}
-                />
-              </Form.Group>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="secondary" onClick={() => setDeleteConfirm({ entity: null, id: null, name: "", input: "" })}>Cancelar</Button>
-              <Button variant="danger" onClick={handleConfirmDelete} disabled={deleteConfirm.input !== `eliminar productos con ${deleteConfirm.entity} "${deleteConfirm.name}"`}>
-                Eliminar Todo
-              </Button>
-            </Modal.Footer>
-          </Modal>
-
-          <Table striped bordered hover responsive>
-            <thead>
-              <tr>
-                <th>Imagen</th>
-                <th>Nombre</th>
-                <th>Marca</th>
-                <th>Categoría</th>
-                <th>SKU</th>
-                <th>Precio</th>
-                <th>Stock</th>
-                <th>Rating</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((product) => (
-                <tr key={product.id}>
-                  <td>
-                    {product.images?.find(img => img.is_principal)?.image && (
-                      <Image
-                        src={product.images.find(img => img.is_principal).image}
-                        thumbnail
-                        style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                      />
-                    )}
-                  </td>
-                  <td>{product.nombre_comercial}</td>
-                  <td>{product.brand?.name || "Sin marca"}</td>
-                  <td>{product.category?.name || "Sin categoría"}</td>
-                  <td>{product.sku}</td>
-                  <td>{formatPrice(product.precio_venta)}</td>
-                  <td className="text-center">
-                    {product.stock === 0 ? (
-                      <Badge bg="danger">AGOTADO</Badge>
-                    ) : product.stock < 5 ? (
-                      <Badge bg="danger">CRÍTICO ({product.stock})</Badge>
-                    ) : product.stock < 10 ? (
-                      <Badge bg="warning" text="dark">BAJO ({product.stock})</Badge>
-                    ) : (
-                      <Badge bg="success" className="px-3">{product.stock}</Badge>
-                    )}
-                  </td>
-                  <td>{product.rating}</td>
-                  <td>
-                    <div className="d-grid gap-2 d-sm-flex justify-content-end">
-                      {/* Botón Nuevo: Gestión de Inventario */}
-                      <Button 
-                          variant="outline-dark" 
-                          size="sm" 
-                          className="me-2"
-                          title="Gestionar Inventario"
-                          onClick={() => handleOpenStockModal(product)}
-                      >
-                          <i className="bi bi-box-seam-fill"></i> Stock
-                      </Button>
-                      <Button variant="warning" size="sm" className="me-2" onClick={() => handleEdit(product)}>
-                        Editar
-                      </Button>
-                      <Button variant="danger" size="sm" onClick={() => handleDelete(product.id)}>
-                        Eliminar
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-
-          <Button variant="primary" onClick={openNewModal}>Agregar Producto</Button>
-
-          <Modal show={showModal} onHide={() => setShowModal(false)} size="xl" centered fullscreen="sm-down">
-            <Modal.Header closeButton>
-              <Modal.Title>{editingId ? "Editar Producto" : "Nuevo Producto"}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-              <Form>
-                <Row className="g-3">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Nombre Comercial</Form.Label>
-                      <Form.Control
-                        value={formData.nombre_comercial || ""}
-                        onChange={(e) => setField("nombre_comercial", e.target.value)}
-                        placeholder="Ej: Smart TV 55 pulgadas"
-                        required
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>EAN</Form.Label>
-                      <Form.Control
-                        value={formData.ean || ""}
-                        onChange={(e) => setField("ean", e.target.value)}
-                        placeholder="Ej: 0123456789012"
-                        required
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>SKU</Form.Label>
-                      <Form.Control
-                        value={formData.sku || ""}
-                        onChange={(e) => setField("sku", e.target.value)}
-                        placeholder="Ej: TV55-XYZ"
-                        required
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>Marca</Form.Label>
-                      <Form.Select
-                        value={formData.brand_id || ""}
-                        onChange={(e) => setField("brand_id", e.target.value)}
-                        required
-                      >
-                        <option value="">Seleccione una marca</option>
-                        {brands.map((brand) => (
-                          <option key={brand.id} value={brand.id}>
-                            {brand.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {brands.length === 0 && (
-                        <Form.Text className="text-danger">
-                          No hay marcas disponibles. Agregue una primero.
-                        </Form.Text>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>Categoría</Form.Label>
-                      <Form.Select
-                        value={formData.category_id || ""}
-                        onChange={(e) => setField("category_id", e.target.value)}
-                        required
-                      >
-                        <option value="">Seleccione una categoría</option>
-                        {categories.map((category) => (
-                          <option key={category.id} value={category.id}>
-                            {category.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {categories.length === 0 && (
-                        <Form.Text className="text-danger">
-                          No hay categorías disponibles. Agregue una primero.
-                        </Form.Text>
-                      )}
-                    </Form.Group>
-                  </Col>
-                  <Col md={4}>
-                    <Form.Group>
-                      <Form.Label>Proveedor</Form.Label>
-                      <Form.Select
-                        value={formData.provider_id || ""}
-                        onChange={(e) => setField("provider_id", e.target.value)}
-                        required
-                      >
-                        <option value="">Seleccione un proveedor</option>
-                        {providers.map((provider) => (
-                          <option key={provider.id} value={provider.id}>
-                            {provider.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {providers.length === 0 && (
-                        <Form.Text className="text-danger">
-                          No hay proveedores disponibles. Agregue uno primero.
-                        </Form.Text>
-                      )}
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Peso (kg)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={formData.peso ?? ""}
-                        onChange={(e) => setField("peso", e.target.value === "" ? "" : parseFloat(e.target.value))}
-                        placeholder="Ej: 5.5"
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Alto (cm)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={alto}
-                        onChange={(e) => { setAlto(e.target.value); setField("_touch", Math.random()); }}
-                        placeholder="Ej: 10"
-                      />
-                      <Form.Text className="text-muted">Medida vertical del producto.</Form.Text>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Largo (cm)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={largo}
-                        onChange={(e) => { setLargo(e.target.value); setField("_touch", Math.random()); }}
-                        placeholder="Ej: 20"
-                      />
-                      <Form.Text className="text-muted">Medida horizontal más larga.</Form.Text>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Ancho (cm)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={ancho}
-                        onChange={(e) => { setAncho(e.target.value); setField("_touch", Math.random()); }}
-                        placeholder="Ej: 30"
-                      />
-                      <Form.Text className="text-muted">Medida horizontal más corta.</Form.Text>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Stock Actual</Form.Label>
-                      <Form.Control 
-                          type="text"
-                          value={formData.stock || 0} 
-                          disabled // BLOQUEADO
-                          className="bg-light fw-bold"
-                      />
-                      <Form.Text className="text-muted" style={{fontSize: '0.75rem'}}>
-                          * Se calcula automáticamente
-                      </Form.Text>
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Precio de Venta (CLP)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        value={formData.precio_venta ?? ""}
-                        onChange={(e) => setField("precio_venta", e.target.value === "" ? "" : parseInt(e.target.value))}
-                        placeholder="Ej: 50000"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Costo CG (CLP)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        min="0"
-                        value={formData.costo_cg ?? ""}
-                        onChange={(e) => setField("costo_cg", e.target.value === "" ? "" : parseInt(e.target.value))}
-                        placeholder="Ej: 30000"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Rating (0–5)</Form.Label>
-                      <Form.Control
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="5"
-                        value={formData.rating ?? ""}
-                        onChange={(e) => setField("rating", e.target.value === "" ? "" : parseFloat(e.target.value))}
-                        placeholder="Ej: 4.5"
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Lugar en Bodega</Form.Label>
-                      <Form.Control
-                        value={formData.lugar_bodega || ""}
-                        onChange={(e) => setField("lugar_bodega", e.target.value)}
-                        placeholder="Ej: A-12"
-                      />
-                    </Form.Group>
-                  </Col>
-                  <Col md={3}>
-                    <Form.Group>
-                      <Form.Label>Edad de Uso</Form.Label>
-                      <Form.Control
-                        value={formData.edad_uso || ""}
-                        onChange={(e) => setField("edad_uso", e.target.value)}
-                        placeholder="Ej: 12+ años"
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={12}>
-                    <Form.Group>
-                      <Form.Label>Descripción</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={4}
-                        value={formData.descripcion || ""}
-                        onChange={(e) => setField("descripcion", e.target.value)}
-                        placeholder="Descripción del producto"
-                      />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Creado en</Form.Label>
-                      <Form.Control value={createdAtStr} readOnly />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Actualizado en</Form.Label>
-                      <Form.Control value={updatedAtStr} readOnly />
-                    </Form.Group>
-                  </Col>
-
-                  <Col md={12}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Imágenes</Form.Label>
-                      <Form.Control type="file" multiple accept="image/*" onChange={(e) => addFiles(e.target.files)} />
-                      <Form.Text className="text-muted">Seleccione hasta 5 imágenes. Vista previa abajo.</Form.Text>
-                    </Form.Group>
-
-                    {previews.length > 0 && (
-                      <Row className="g-3">
-                        {previews.map((pv, idx) => (
-                          <Col key={`${pv.kind}-${pv.kind === "existing" ? pv.id : pv.idx}-${idx}`} md={3}>
-                            <div className="border rounded p-2 text-center">
-                              <Image src={pv.url} thumbnail style={{ width: "100%", height: 160, objectFit: "cover" }} />
-                              <Form.Check
-                                type="radio"
-                                name="principal"
-                                label="Principal"
-                                checked={
-                                  (principal?.kind === "existing" && pv.kind === "existing" && principal.value === pv.id) ||
-                                  (principal?.kind === "new" && pv.kind === "new" && principal.value === pv.idx)
-                                }
-                                onChange={() =>
-                                  setPrincipal(
-                                    pv.kind === "existing"
-                                      ? { kind: "existing", value: pv.id }
-                                      : { kind: "new", value: pv.idx }
-                                  )
-                                }
-                                className="mt-2"
-                              />
-                              {pv.kind === "existing" ? (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  className="mt-2 w-100"
-                                  onClick={() => handleDeleteImage(pv.id)}
-                                >
-                                  <i className="bi bi-trash"></i> Eliminar
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  className="mt-2 w-100"
-                                  onClick={() => handleRemovePreview(pv)}
-                                >
-                                  <i className="bi bi-trash"></i> Quitar
-                                </Button>
-                              )}
-                            </div>
-                          </Col>
-                        ))}
-                      </Row>
-                    )}
-                  </Col>
-                </Row>
-              </Form>
-            </Modal.Body>
-            <Modal.Footer className={theme === "dark" ? "bg-dark" : "bg-light"}>
-              <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
-              <Button variant="primary" onClick={handleSave}>Guardar</Button>
-            </Modal.Footer>
-          </Modal>
-          {/* --- MODAL DE LOGÍSTICA (ENTRADAS/SALIDAS) --- */}
-          <Modal show={showStockModal} onHide={() => setShowStockModal(false)} centered>
-            <Modal.Header closeButton className="bg-dark text-white">
-                <Modal.Title>Registrar Movimiento</Modal.Title>
-            </Modal.Header>
-            <Modal.Body className="p-4">
-                {selectedProductForStock && (
-                    <Alert variant="secondary" className="d-flex justify-content-between align-items-center mb-3">
-                        <div>
-                            <strong>{selectedProductForStock.nombre_comercial}</strong>
-                            <div className="small text-muted">SKU: {selectedProductForStock.sku}</div>
-                        </div>
-                        <Badge bg="dark">Stock Actual: {selectedProductForStock.stock}</Badge>
-                    </Alert>
-                )}
-                
-                <Form>
-                    <Form.Group className="mb-3">
-                        <Form.Label className="fw-bold">Tipo de Operación</Form.Label>
-                        <div className="d-flex gap-3">
-                            <Form.Check 
-                                type="radio" 
-                                id="move-in"
-                                label="🟢 ENTRADA (Compra)" 
-                                name="moveType" 
-                                checked={stockFormData.movement_type === 'IN'}
-                                onChange={() => setStockFormData({...stockFormData, movement_type: 'IN'})}
-                            />
-                            <Form.Check 
-                                type="radio" 
-                                id="move-out"
-                                label="🔴 SALIDA (Venta/Merma)" 
-                                name="moveType" 
-                                checked={stockFormData.movement_type === 'OUT'}
-                                onChange={() => setStockFormData({...stockFormData, movement_type: 'OUT'})}
-                            />
-                        </div>
-                    </Form.Group>
-
-                    <Row>
-                        <Col md={6}>
-                            <Form.Group className="mb-3">
-                                <Form.Label>Cantidad</Form.Label>
-                                <InputGroup>
-                                    <Form.Control 
-                                        type="number" 
-                                        min="1" 
-                                        value={stockFormData.quantity} 
-                                        onChange={(e) => setStockFormData({...stockFormData, quantity: e.target.value})}
-                                    />
-                                    <InputGroup.Text>u.</InputGroup.Text>
-                                </InputGroup>
-                            </Form.Group>
-                        </Col>
-                    </Row>
-
-                    <Form.Group>
-                        <Form.Label>Motivo / Razón <span className="text-danger">*</span></Form.Label>
-                        <Form.Control 
-                            as="textarea" 
-                            rows={2}
-                            placeholder="Ej: Factura #5501, Ajuste de fin de mes..."
-                            value={stockFormData.reason}
-                            onChange={(e) => setStockFormData({...stockFormData, reason: e.target.value})}
-                        />
-                    </Form.Group>
-                </Form>
-            </Modal.Body>
-            <Modal.Footer>
-                <Button variant="secondary" onClick={() => setShowStockModal(false)}>Cancelar</Button>
-                <Button 
-                    variant={stockFormData.movement_type === 'IN' ? 'success' : 'danger'} 
-                    onClick={handleSubmitStockMovement}
-                >
-                    Confirmar {stockFormData.movement_type === 'IN' ? 'Entrada' : 'Salida'}
+                {/* Botón Principal */}
+                <Button variant="primary" className="fw-bold px-4 text-nowrap" onClick={() => openProductModal(null)}>
+                    <i className="bi bi-plus-lg me-2"></i>Nuevo Producto
                 </Button>
-            </Modal.Footer>
-          </Modal>
-        </>
+            </div>
+        </Card.Body>
+        <Card.Footer className={`d-flex gap-2 py-2 overflow-auto ${dark ? 'border-secondary' : 'bg-light'}`}>
+            <small className="text-muted fw-bold me-2 align-self-center text-nowrap">DATOS MAESTROS:</small>
+            <Button size="sm" variant={dark ? "outline-info" : "outline-secondary"} onClick={() => openMasterModal('brand')}>
+                <i className="bi bi-tag me-1"></i> Marcas
+            </Button>
+            <Button size="sm" variant={dark ? "outline-info" : "outline-secondary"} onClick={() => openMasterModal('category')}>
+                <i className="bi bi-list-nested me-1"></i> Categorías
+            </Button>
+            <Button size="sm" variant={dark ? "outline-info" : "outline-secondary"} onClick={() => openMasterModal('provider')}>
+                <i className="bi bi-truck me-1"></i> Proveedores
+            </Button>
+        </Card.Footer>
+      </Card>
+
+      {/* 2. TABLA PROFESIONAL */}
+      {loading ? (
+          <div className="text-center py-5"><Spinner animation="border" variant="primary" /></div>
+      ) : (
+          <Card className={`overflow-hidden ${cardClass}`}>
+            <Table responsive hover className={`mb-0 align-middle table-sm ${dark ? 'table-dark' : ''}`}>
+                <thead className={tableHeaderClass}>
+                    <tr className="small text-uppercase">
+                        <th style={{width:'60px'}}></th>
+                        <th style={{cursor:'pointer'}} onClick={() => handleSort('nombre_comercial')}>Producto <SortIcon column='nombre_comercial'/></th>
+                        <th style={{cursor:'pointer'}} onClick={() => handleSort('brand')}>Marca <SortIcon column='brand'/></th>
+                        <th style={{cursor:'pointer'}} onClick={() => handleSort('category')}>Categoría <SortIcon column='category'/></th>
+                        <th>SKU</th>
+                        <th className="text-end" style={{cursor:'pointer'}} onClick={() => handleSort('precio_venta')}>Precio <SortIcon column='precio_venta'/></th>
+                        <th className="text-center" style={{cursor:'pointer'}} onClick={() => handleSort('stock')}>Stock <SortIcon column='stock'/></th>
+                        <th className="text-end">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {processedProducts.map(p => (
+                        <tr key={p.id} className={dark ? "border-secondary" : ""}>
+                            <td>
+                                <div className="rounded bg-body-secondary d-flex align-items-center justify-content-center" style={{width:40, height:40, overflow:'hidden'}}>
+                                    {p.images?.[0]?.image ? (
+                                        <Image src={p.images[0].image} style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                                    ) : <i className="bi bi-box text-muted"></i>}
+                                </div>
+                            </td>
+                            <td className="fw-bold text-nowrap">{p.nombre_comercial}</td>
+                            <td>{p.brand?.name}</td>
+                            <td><Badge bg="secondary" className="fw-normal">{p.category?.name}</Badge></td>
+                            <td className="font-monospace small">{p.sku}</td>
+                            <td className="text-end fw-bold text-success">{formatPrice(p.precio_venta)}</td>
+                            <td className="text-center">
+                                {p.stock === 0 ? <Badge bg="danger">AGOTADO</Badge> :
+                                 p.stock < 5 ? <Badge bg="warning" text="dark">{p.stock}</Badge> :
+                                 <span className="fw-bold text-success">{p.stock}</span>
+                                }
+                            </td>
+                            <td className="text-end">
+                                <div className="d-flex justify-content-end gap-2">
+                                    <Button variant={dark?"outline-light":"outline-dark"} size="sm" onClick={() => handleStockClick(p)} title="Inventario">
+                                        <i className="bi bi-boxes"></i>
+                                    </Button>
+                                    <Button variant="outline-primary" size="sm" onClick={() => openProductModal(p)} title="Editar">
+                                        <i className="bi bi-pencil-fill"></i>
+                                    </Button>
+                                    <Button variant="outline-danger" size="sm" onClick={() => handleDeleteProduct(p.id)} title="Eliminar">
+                                        <i className="bi bi-trash-fill"></i>
+                                    </Button>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
+                    {processedProducts.length === 0 && (
+                        <tr><td colSpan="8" className="text-center py-5 text-muted">No se encontraron resultados.</td></tr>
+                    )}
+                </tbody>
+            </Table>
+          </Card>
       )}
-      {/* --- SISTEMA DE NOTIFICACIONES FLOTANTES (TOASTS) --- */}
-      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 1060, position: 'fixed' }}>
-        <Toast 
-          onClose={() => setToastConfig({ ...toastConfig, show: false })} 
-          show={toastConfig.show} 
-          delay={5000} 
-          autohide
-          bg={toastConfig.variant}
-        >
-          <Toast.Header closeButton={true}>
-            <strong className="me-auto">
-                {toastConfig.variant === 'danger' ? 'Error' : toastConfig.variant === 'success' ? 'Éxito' : 'Atención'}
-            </strong>
-          </Toast.Header>
-          <Toast.Body className={toastConfig.variant === 'light' ? 'text-dark' : 'text-white'}>
-            {toastConfig.message}
-          </Toast.Body>
-        </Toast>
+
+      {/* --- MODAL MAESTROS (Tabulado para Crear/Editar) --- */}
+      {[
+          { show: showBrandModal, set: setShowBrandModal, type: 'brand', title: 'Marcas', list: brands },
+          { show: showCategoryModal, set: setShowCategoryModal, type: 'category', title: 'Categorías', list: categories },
+          { show: showProviderModal, set: setShowProviderModal, type: 'provider', title: 'Proveedores', list: providers }
+      ].map(m => (
+          <Modal key={m.type} show={m.show} onHide={() => m.set(false)} centered backdrop="static">
+              <Modal.Header closeButton className={dark ? "bg-secondary text-white" : "bg-light"}>
+                  <Modal.Title>Gestionar {m.title}</Modal.Title>
+              </Modal.Header>
+              <Modal.Body className={dark ? "bg-dark text-white" : ""}>
+                  <Tabs defaultActiveKey="create" className="mb-3">
+                      <Tab eventKey="create" title="Crear">
+                          <InputGroup className="mt-3">
+                              <Form.Control 
+                                  placeholder="Nombre nuevo..." 
+                                  value={masterName} 
+                                  onChange={e=>setMasterName(e.target.value)} 
+                                  className={inputClass}
+                              />
+                              <Button variant="success" onClick={()=>handleSaveMaster(m.type)}>Crear</Button>
+                          </InputGroup>
+                      </Tab>
+                      <Tab eventKey="edit" title="Editar/Borrar">
+                          <Form.Select className={`mt-3 mb-2 ${inputClass}`} onChange={e => {
+                              setMasterEditId(e.target.value);
+                              const item = m.list.find(x => x.id === parseInt(e.target.value));
+                              setMasterEditName(item ? item.name : "");
+                          }}>
+                              <option value="">Seleccione...</option>
+                              {m.list.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                          </Form.Select>
+                          {masterEditId && (
+                              <InputGroup className="mt-2">
+                                  <Form.Control value={masterEditName} onChange={e=>setMasterEditName(e.target.value)} className={inputClass}/>
+                                  <Button variant="primary" onClick={()=>handleUpdateMaster(m.type)}>Guardar</Button>
+                                  <Button variant="danger" onClick={()=>handleDeleteMasterAttempt(m.type)}><i className="bi bi-trash"></i></Button>
+                              </InputGroup>
+                          )}
+                      </Tab>
+                  </Tabs>
+              </Modal.Body>
+          </Modal>
+      ))}
+
+      {/* --- MODAL ELIMINACIÓN SEGURA --- */}
+      <Modal show={deleteConfirm.show} onHide={() => setDeleteConfirm({...deleteConfirm, show: false})} centered backdrop="static">
+          <Modal.Header closeButton className="bg-danger text-white">
+              <Modal.Title><i className="bi bi-exclamation-triangle-fill me-2"></i>Acción Irreversible</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+              <Alert variant="warning">
+                  Se detectaron productos asociados a <strong>{deleteConfirm.name}</strong>. 
+                  Para continuar, debe autorizar la eliminación de <strong>TODOS</strong> estos productos.
+              </Alert>
+              <Form.Label>Escriba: <strong>eliminar productos con {deleteConfirm.entity} "{deleteConfirm.name}"</strong></Form.Label>
+              <Form.Control 
+                  value={deleteConfirm.input}
+                  onChange={e => setDeleteConfirm({...deleteConfirm, input: e.target.value})}
+                  className="border-danger"
+                  autoFocus
+              />
+          </Modal.Body>
+          <Modal.Footer>
+              <Button variant="secondary" onClick={() => setDeleteConfirm({...deleteConfirm, show: false})}>Cancelar</Button>
+              <Button 
+                  variant="danger" 
+                  onClick={executeCascadingDelete}
+                  disabled={deleteConfirm.input !== `eliminar productos con ${deleteConfirm.entity} "${deleteConfirm.name}"`}
+              >
+                  Confirmar Eliminación Total
+              </Button>
+          </Modal.Footer>
+      </Modal>
+
+      {/* --- MODAL FORMULARIO PRODUCTO (CON TABS) --- */}
+      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered backdrop="static">
+          <Modal.Header closeButton className="bg-primary text-white">
+              <Modal.Title>{editingId ? "Editar Producto" : "Nuevo Producto"}</Modal.Title>
+          </Modal.Header>
+          <Modal.Body className={dark ? "bg-dark text-white" : ""}>
+              <Tabs defaultActiveKey="general" className="mb-3">
+                  
+                  {/* PESTAÑA 1: DATOS BÁSICOS */}
+                  <Tab eventKey="general" title="📦 General">
+                      <Row className="g-3">
+                          <Col md={12}>
+                              <Form.Label>Nombre Comercial *</Form.Label>
+                              <Form.Control value={formData.nombre_comercial} onChange={e=>setFormData({...formData, nombre_comercial: e.target.value})} className={inputClass} autoFocus />
+                          </Col>
+                          <Col md={6}>
+                              <Form.Label>SKU *</Form.Label>
+                              <Form.Control value={formData.sku} onChange={e=>setFormData({...formData, sku: e.target.value})} className={inputClass} />
+                          </Col>
+                          <Col md={6}>
+                              <Form.Label>EAN</Form.Label>
+                              <Form.Control value={formData.ean} onChange={e=>setFormData({...formData, ean: e.target.value})} className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Marca *</Form.Label>
+                              <Form.Select value={formData.brand_id} onChange={e=>setFormData({...formData, brand_id: e.target.value})} className={inputClass}>
+                                  <option value="">Seleccione...</option>
+                                  {brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+                              </Form.Select>
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Categoría</Form.Label>
+                              <Form.Select value={formData.category_id} onChange={e=>setFormData({...formData, category_id: e.target.value})} className={inputClass}>
+                                  <option value="">Seleccione...</option>
+                                  {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                              </Form.Select>
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Proveedor</Form.Label>
+                              <Form.Select value={formData.provider_id} onChange={e=>setFormData({...formData, provider_id: e.target.value})} className={inputClass}>
+                                  <option value="">Seleccione...</option>
+                                  {providers.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                              </Form.Select>
+                          </Col>
+                      </Row>
+                  </Tab>
+
+                  {/* PESTAÑA 2: DETALLES */}
+                  <Tab eventKey="details" title="📝 Detalles">
+                      <Row className="g-3">
+                          <Col md={12}>
+                              <Form.Label>Descripción</Form.Label>
+                              <Form.Control as="textarea" rows={3} value={formData.descripcion || ""} onChange={e=>setFormData({...formData, descripcion: e.target.value})} className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Ubicación Bodega</Form.Label>
+                              <Form.Control value={formData.lugar_bodega || ""} onChange={e=>setFormData({...formData, lugar_bodega: e.target.value})} placeholder="Ej: Pasillo A-1" className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Edad de Uso</Form.Label>
+                              <Form.Control value={formData.edad_uso || ""} onChange={e=>setFormData({...formData, edad_uso: e.target.value})} placeholder="Ej: +3 años" className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Peso (kg)</Form.Label>
+                              <Form.Control type="number" step="0.01" value={formData.peso || 0} onChange={e=>setFormData({...formData, peso: e.target.value})} className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Alto (cm)</Form.Label>
+                              <Form.Control value={dims.alto} onChange={e => setDims({ ...dims, alto: e.target.value })} className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Largo (cm)</Form.Label>
+                              <Form.Control value={dims.largo} onChange={e => setDims({ ...dims, largo: e.target.value })} className={inputClass} />
+                          </Col>
+                          <Col md={4}>
+                              <Form.Label>Ancho (cm)</Form.Label>
+                              <Form.Control value={dims.ancho} onChange={e => setDims({ ...dims, ancho: e.target.value })} className={inputClass} />
+                          </Col>
+                      </Row>
+                  </Tab>
+
+                  {/* PESTAÑA 3: PRECIOS E IMÁGENES */}
+                  <Tab eventKey="media" title="💰 Precios e Img">
+                      <Row className="g-3">
+                          <Col md={6}>
+                              <Form.Label>Precio Venta</Form.Label>
+                              <InputGroup><InputGroup.Text>$</InputGroup.Text><Form.Control type="number" value={formData.precio_venta} onChange={e=>setFormData({...formData, precio_venta: e.target.value})} className={inputClass} /></InputGroup>
+                          </Col>
+                          <Col md={6}>
+                              <Form.Label>Costo</Form.Label>
+                              <InputGroup><InputGroup.Text>$</InputGroup.Text><Form.Control type="number" value={formData.costo_cg} onChange={e=>setFormData({...formData, costo_cg: e.target.value})} className={inputClass} /></InputGroup>
+                          </Col>
+                          <Col md={6}>
+                              <Form.Label>Stock (Bloqueado)</Form.Label>
+                              <Form.Control value={formData.stock || 0} disabled className="bg-secondary-subtle" />
+                          </Col>
+                          <Col md={6}>
+                              <Form.Label>Rating</Form.Label>
+                              <Form.Control type="number" step="0.1" max="5" value={formData.rating} onChange={e=>setFormData({...formData, rating: e.target.value})} className={inputClass} />
+                          </Col>
+
+                          <Col md={12}>
+                              <Form.Label>Gestión de Imágenes</Form.Label>
+                              <Form.Control type="file" multiple onChange={handleFileChange} className={`mb-2 ${inputClass}`} />
+                              <div className="d-flex gap-2 mt-2 p-2 border rounded bg-light overflow-auto">
+                                  {previews.map((pv, i) => (
+                                      <div 
+                                          key={i} 
+                                          className={`position-relative border p-1 ${principalIndex === i ? 'border-success border-2' : ''}`} 
+                                          style={{minWidth: 80, cursor:'pointer'}} 
+                                          onClick={() => setPrincipalIndex(i)} 
+                                      >
+                                          <Image src={pv.url} style={{width:70, height:70, objectFit:'cover'}} />
+                                          {principalIndex === i && (
+                                              <Badge bg="success" className="position-absolute top-0 start-0" style={{zIndex:1}}>
+                                                  Main
+                                              </Badge>
+                                          )}
+                                          <Button 
+                                              size="sm" 
+                                              variant="danger" 
+                                              className="position-absolute top-0 end-0 p-0" 
+                                              style={{width:20, height:20, zIndex:2}} 
+                                              onClick={(e) => { e.stopPropagation(); removePreview(i); }}
+                                          >
+                                              &times;
+                                          </Button>
+                                      </div>
+                                  ))}
+                                  {previews.length === 0 && <span className="text-muted small m-auto">Sin imágenes</span>}
+                              </div>
+                          </Col>
+                      </Row>
+                  </Tab>
+              </Tabs>
+          </Modal.Body>
+          <Modal.Footer className={dark ? "bg-dark border-secondary" : ""}>
+              <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
+              <Button variant="primary" onClick={handleSaveProduct} disabled={saving}>
+                  {saving ? <><Spinner size="sm" animation="border"/> Guardando...</> : "Guardar Producto"}
+              </Button>
+          </Modal.Footer>
+      </Modal>
+
+      {/* --- MODAL STOCK --- */}
+      <Modal show={showStockModal} onHide={() => setShowStockModal(false)} centered>
+          <Modal.Header closeButton className="bg-dark text-white"><Modal.Title>Control de Inventario</Modal.Title></Modal.Header>
+          <Modal.Body>
+              <div className="d-flex justify-content-between align-items-center mb-4">
+                  <div>
+                      <h5 className="mb-0">{selectedProductForStock?.nombre_comercial}</h5>
+                      <small className="text-muted">{selectedProductForStock?.sku}</small>
+                  </div>
+                  <div className="text-end">
+                      <span className="d-block small text-muted">STOCK ACTUAL</span>
+                      <h2 className="mb-0">{selectedProductForStock?.stock}</h2>
+                  </div>
+              </div>
+              <Form>
+                  <div className="btn-group w-100 mb-3" role="group">
+                      <input type="radio" className="btn-check" name="btnradio" id="btnradio1" autoComplete="off" checked={stockFormData.movement_type==='IN'} onChange={()=>setStockFormData({...stockFormData, movement_type:'IN'})} />
+                      <label className="btn btn-outline-success" htmlFor="btnradio1">ENTRADA (Compra)</label>
+
+                      <input type="radio" className="btn-check" name="btnradio" id="btnradio2" autoComplete="off" checked={stockFormData.movement_type==='OUT'} onChange={()=>setStockFormData({...stockFormData, movement_type:'OUT'})} />
+                      <label className="btn btn-outline-danger" htmlFor="btnradio2">SALIDA (Venta)</label>
+                  </div>
+                  <Form.Group className="mb-3">
+                      <Form.Label>Cantidad</Form.Label>
+                      <Form.Control type="number" min="1" value={stockFormData.quantity} onChange={e=>setStockFormData({...stockFormData, quantity: e.target.value})} size="lg" className="text-center fw-bold" />
+                  </Form.Group>
+                  <Form.Group>
+                      <Form.Label>Motivo / Razón</Form.Label>
+                      <Form.Control as="textarea" rows={2} value={stockFormData.reason} onChange={e=>setStockFormData({...stockFormData, reason: e.target.value})} placeholder="Requerido para auditoría" />
+                  </Form.Group>
+              </Form>
+          </Modal.Body>
+          <Modal.Footer>
+              <Button variant="dark" className="w-100" onClick={submitStock}>Confirmar Movimiento</Button>
+          </Modal.Footer>
+      </Modal>
+
+      <ToastContainer position="top-end" className="p-3" style={{zIndex: 9999}}>
+          <Toast onClose={() => setToastConfig({...toastConfig, show:false})} show={toastConfig.show} delay={4000} autohide bg={toastConfig.variant}>
+              <Toast.Header><strong className="me-auto">Sistema</strong></Toast.Header>
+              <Toast.Body className="text-white">{toastConfig.message}</Toast.Body>
+          </Toast>
       </ToastContainer>
     </div>
   );
