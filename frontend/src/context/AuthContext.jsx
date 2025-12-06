@@ -32,7 +32,7 @@ export function AuthProvider({ children }) {
 
   const login = async (username, password) => {
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/token/', {
+      const response = await fetch('https://bodegas-salas-api.onrender.com/api/token/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
 
     finalOptions.headers = headers;
 
-    const response = await fetch(`http://127.0.0.1:8000${url}`, finalOptions);
+    const response = await fetch(`https://bodegas-salas-api.onrender.com${url}`, finalOptions);
 
     if (response.status === 401) {
       logout();
