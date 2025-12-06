@@ -7,13 +7,15 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from companies.permissions import IsAdminOrReadOnly, IsSellerUser
+from companies.permissions import IsAdminOrReadOnly, IsSellerUser, IsSellerUserOrAdmin
 from datetime import datetime
 
 class StockMovementViewSet(viewsets.ModelViewSet):
     queryset = StockMovement.objects.all()
     serializer_class = StockMovementSerializer
-    permission_classes = [IsAdminOrReadOnly] # Usando tus permisos personalizados
+
+    permission_classes = [IsSellerUserOrAdmin]
+
     filterset_fields = ['product', 'movement_type']
 
     # Guardar automáticamente quién hizo el movimiento
@@ -89,6 +91,7 @@ class ProviderViewSet(viewsets.ModelViewSet):
 class ProductImageViewSet(viewsets.ModelViewSet):
     queryset = ProductImage.objects.all()
     serializer_class = ProductImageSerializer
+    permission_classes = [IsSellerUserOrAdmin]
     filter_backends = [filters.SearchFilter]
     search_fields = ['product__id']
 
