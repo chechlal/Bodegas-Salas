@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert, Badge, InputGroup } from "react-bootstrap";
+import { Table, Button, Modal, Form, Spinner, Row, Col, Image, Alert, Badge, InputGroup, Toast, ToastContainer } from "react-bootstrap";
 import { useAuth } from "../context/AuthContext";
 
 function AdminProducts({ theme }) {
@@ -55,8 +55,15 @@ function AdminProducts({ theme }) {
   const [previews, setPreviews] = useState([]);
   const [principal, setPrincipal] = useState(null);
 
-  const [error, setError] = useState(null);
-  const [warn, setWarn] = useState(null);
+  const [toastConfig, setToastConfig] = useState({
+    show:false,
+    message: '',
+    variant: 'danger'
+  });
+
+  const showFeedback = (message, variant = 'danger') => {
+    setToastConfig({ show: true, message, variant })
+  };
 
   const [deleteConfirm, setDeleteConfirm] = useState({ entity: null, id: null, name: "", input: "" });
 
@@ -76,7 +83,7 @@ function AdminProducts({ theme }) {
       setProducts(data.results || data);
     } catch (e) {
       console.error("Error cargando productos", e);
-      setError("Error al cargar productos.");
+      showFeedback("Mensaje de error", "danger")
     } finally {
       setLoading(false);
     }
@@ -102,7 +109,7 @@ function AdminProducts({ theme }) {
       setProviders(providersData.results || providersData);
     } catch (e) {
       console.error("Error cargando opciones", e);
-      setError("Error al cargar opciones.");
+      showFeedback("Error al cargar opciones.", "danger");
     }
   };
 
@@ -133,14 +140,10 @@ function AdminProducts({ theme }) {
     setNewImages([]);
     setPreviews([]);
     setPrincipal(null);
-    setError(null);
-    setWarn(null);
     setShowModal(true);
   };
 
   const handleEdit = async (product) => {
-    setError(null);
-    setWarn(null);
     setFormData({
       ...product,
       brand_id: product.brand?.id || "",
@@ -167,7 +170,7 @@ function AdminProducts({ theme }) {
       setPrincipal(principalFound ? { kind: "existing", value: principalFound.id } : null);
     } catch (e) {
       console.error("Error cargando imágenes", e);
-      setError("Error al cargar imágenes del producto.");
+      showFeedback("Error al cargar imágenes del producto.", "danger");
     }
 
     setNewImages([]);
@@ -185,13 +188,13 @@ function AdminProducts({ theme }) {
   const addFiles = (files) => {
     const arr = Array.from(files || []).filter(file => file.type.startsWith("image/") && file.size <= 5 * 1024 * 1024);
     if (arr.length === 0) {
-      setError("Por favor, seleccione archivos de imagen válidos (máximo 5MB cada uno).");
+      showFeedback("Por favor, seleccione archivos de imagen válidos (máximo 50MB cada uno).", "danger");
       return;
     }
     const total = existingImages.length + newImages.length + arr.length;
     const limit = 5;
     if (total > limit) {
-      setError(`Máximo ${limit} imágenes permitidas por producto.`);
+      showFeedback(`Máximo ${limit} imágenes permitidas por producto.`, "danger");
       return;
     }
     const newPrev = arr.map((file, idx) => ({
@@ -226,7 +229,7 @@ function AdminProducts({ theme }) {
       if (principal?.kind === "existing" && principal.value === imageId) setPrincipal(null);
     } catch (e) {
       console.error("Error eliminando imagen", e);
-      setError("Error al eliminar la imagen.");
+      showFeedback("Error al eliminar la imagen.", "danger");
     }
   };
 
@@ -256,8 +259,6 @@ function AdminProducts({ theme }) {
   };
 
   const handleSave = async () => {
-    setError(null);
-    setWarn(null);
 
     try {
       const nums = ["precio_venta", "stock", "costo_cg", "peso", "rating"];
@@ -322,7 +323,7 @@ function AdminProducts({ theme }) {
               });
               if (!imgRes.ok) {
                   const errorData = await imgRes.json();
-                  setWarn(prev => prev ? `${prev}\nError en imagen ${i + 1}: ${JSON.stringify(errorData)}` : `Error en imagen ${i + 1}: ${JSON.stringify(errorData)}`);
+                  showFeedback(prev => prev ? `${prev}\nError en imagen ${i + 1}: ${JSON.stringify(errorData)}` : `Error en imagen ${i + 1}: ${JSON.stringify(errorData)}`, "success");
                   throw new Error(`Error subiendo imagen ${i + 1}`);
               }
           } catch (e) {
@@ -332,7 +333,7 @@ function AdminProducts({ theme }) {
       }
 
       if (uploadErrors > 0) {
-        setWarn(`Se subieron ${newImages.length - uploadErrors} de ${newImages.length} imágenes nuevas. Revisa las fallidas.`);
+        showFeedback(`Se subieron ${newImages.length - uploadErrors} de ${newImages.length} imágenes nuevas. Revisa las fallidas.`, "success");
       }
 
       previews.filter(p => p.kind === "new").forEach(p => URL.revokeObjectURL(p.url));
@@ -340,13 +341,13 @@ function AdminProducts({ theme }) {
       setShowModal(false);
     } catch (e) {
       console.error("Error en handleSave:", e);
-      setError(e.message || "Error inesperado al guardar el producto.");
+      showFeedback(e.message || "Error inesperado al guardar el producto.", "danger");
     }
   };
 
   const handleSaveBrand = async () => {
     if (!newBrandName.trim()) {
-      setError("El nombre de la marca es requerido.");
+      showFeedback("El nombre de la marca es requerido.", "danger");
       return;
     }
     try {
@@ -364,13 +365,13 @@ function AdminProducts({ theme }) {
       setShowBrandModal(false);
       await loadOptions();
     } catch (e) {
-      setError(e.message || "Error al guardar la marca.");
+      showFeedback(e.message || "Error al guardar la marca.", "danger");
     }
   };
 
   const handleSaveCategory = async () => {
     if (!newCategoryName.trim()) {
-      setError("El nombre de la categoría es requerido.");
+      showFeedback("El nombre de la categoría es requerido.", "danger");
       return;
     }
     try {
@@ -388,13 +389,13 @@ function AdminProducts({ theme }) {
       setShowCategoryModal(false);
       await loadOptions();
     } catch (e) {
-      setError(e.message || "Error al guardar la categoría.");
+      showFeedback(e.message || "Error al guardar la categoría.", "danger");
     }
   };
 
   const handleSaveProvider = async () => {
     if (!newProviderName.trim()) {
-      setError("El nombre del proveedor es requerido.");
+      showFeedback("El nombre del proveedor es requerido.", "danger");
       return;
     }
     try {
@@ -412,7 +413,7 @@ function AdminProducts({ theme }) {
       setShowProviderModal(false);
       await loadOptions();
     } catch (e) {
-      setError(e.message || "Error al guardar el proveedor.");
+      showFeedback(e.message || "Error al guardar el proveedor.", "danger");
     }
   };
 
@@ -425,7 +426,7 @@ function AdminProducts({ theme }) {
       return productsList.length > 0 ? productsList : null;
     } catch (e) {
       console.error(`Error verificando productos asociados a ${entityType}`, e);
-      setError(`Error al verificar productos asociados a ${entityType}.`);
+      showFeedback(`Error al verificar productos asociados a ${entityType}.`, "danger");
       return null;
     }
   };
@@ -433,13 +434,13 @@ function AdminProducts({ theme }) {
   const handleDeleteBrand = async () => {
     const brandId = selectedBrandId;
     if (!brandId) {
-      setError("Por favor, seleccione una marca para eliminar.");
+      showFeedback("Por favor, seleccione una marca para eliminar.", "danger");
       return;
     }
 
     const brand = brands.find(b => b.id === parseInt(brandId));
     if (!brand) {
-      setError("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -449,7 +450,7 @@ function AdminProducts({ theme }) {
         setDeleteConfirm({ entity: "marca", id: brandId, name: brand.name, input: "" });
         return;
       }
-      setWarn("No se puede eliminar la marca mientras haya productos asociados.");
+      showFeedback("No se puede eliminar la marca mientras haya productos asociados.", "success");
       return;
     }
 
@@ -460,23 +461,23 @@ function AdminProducts({ theme }) {
       setProducts(prev => prev.map(p => p.brand_id === parseInt(brandId) ? { ...p, brand: null } : p));
       setFormData(prev => ({ ...prev, brand_id: prev.brand_id === parseInt(brandId) ? "" : prev.brand_id }));
       setSelectedBrandId("");
-      setWarn("Marca eliminada exitosamente.");
+      showFeedback("Marca eliminada exitosamente.", "success");
     } catch (e) {
       console.error("Error eliminando marca", e);
-      setError("Error al eliminar la marca.");
+      showFeedback("Error al eliminar la marca.", "danger");
     }
   };
 
   const handleDeleteCategory = async () => {
     const categoryId = selectedCategoryId;
     if (!categoryId) {
-      setError("Por favor, seleccione una categoría para eliminar.");
+      showFeedback("Por favor, seleccione una categoría para eliminar.", "danger");
       return;
     }
 
     const category = categories.find(c => c.id === parseInt(categoryId));
     if (!category) {
-      setError("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -486,7 +487,7 @@ function AdminProducts({ theme }) {
         setDeleteConfirm({ entity: "categoría", id: categoryId, name: category.name, input: "" });
         return;
       }
-      setWarn("No se puede eliminar la categoría mientras haya productos asociados.");
+      showFeedback("No se puede eliminar la categoría mientras haya productos asociados.", "success");
       return;
     }
 
@@ -497,23 +498,23 @@ function AdminProducts({ theme }) {
       setProducts(prev => prev.map(p => p.category_id === parseInt(categoryId) ? { ...p, category: null } : p));
       setFormData(prev => ({ ...prev, category_id: prev.category_id === parseInt(categoryId) ? "" : prev.category_id }));
       setSelectedCategoryId("");
-      setWarn("Categoría eliminada exitosamente.");
+      showFeedback("Categoría eliminada exitosamente.", "success");
     } catch (e) {
       console.error("Error eliminando categoría", e);
-      setError("Error al eliminar la categoría.");
+      showFeedback("Error al eliminar la categoría.", "danger");
     }
   };
 
   const handleDeleteProvider = async () => {
     const providerId = selectedProviderId;
     if (!providerId) {
-      setError("Por favor, seleccione un proveedor para eliminar.");
+      showFeedback("Por favor, seleccione un proveedor para eliminar.", "danger");
       return;
     }
 
     const provider = providers.find(p => p.id === parseInt(providerId));
     if (!provider) {
-      setError("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -523,7 +524,7 @@ function AdminProducts({ theme }) {
         setDeleteConfirm({ entity: "proveedor", id: providerId, name: provider.name, input: "" });
         return;
       }
-      setWarn("No se puede eliminar el proveedor mientras haya productos asociados.");
+      showFeedback("No se puede eliminar el proveedor mientras haya productos asociados.", "success");
       return;
     }
 
@@ -534,10 +535,10 @@ function AdminProducts({ theme }) {
       setProducts(prev => prev.map(p => p.provider_id === parseInt(providerId) ? { ...p, provider: null } : p));
       setFormData(prev => ({ ...prev, provider_id: prev.provider_id === parseInt(providerId) ? "" : prev.provider_id }));
       setSelectedProviderId("");
-      setWarn("Proveedor eliminado exitosamente.");
+      showFeedback("Proveedor eliminado exitosamente.", "success");
     } catch (e) {
       console.error("Error eliminando proveedor", e);
-      setError("Error al eliminar el proveedor.");
+      showFeedback("Error al eliminar el proveedor.", "danger");
     }
   };
 
@@ -545,7 +546,7 @@ function AdminProducts({ theme }) {
     const { entity, id, name, input } = deleteConfirm;
     const expectedInput = `eliminar productos con ${entity} "${name}"`;
     if (input !== expectedInput) {
-      setError(`Debe escribir exactamente "${expectedInput}" para confirmar la eliminación.`);
+      showFeedback(`Debe escribir exactamente "${expectedInput}" para confirmar la eliminación.`, "danger");
       return;
     }
 
@@ -579,23 +580,23 @@ function AdminProducts({ theme }) {
 
       if (!res.ok) throw new Error(`Error al eliminar el ${entity}.`);
       setDeleteConfirm({ entity: null, id: null, name: "", input: "" });
-      setWarn(`${entity.charAt(0).toUpperCase() + entity.slice(1)} y productos asociados eliminados exitosamente.`);
+      showFeedback(`${entity.charAt(0).toUpperCase() + entity.slice(1)} y productos asociados eliminados exitosamente.`, "success");
     } catch (e) {
       console.error(`Error eliminando ${entity}`, e);
-      setError(`Error al eliminar el ${entity} y sus productos.`);
+      showFeedback(`Error al eliminar el ${entity} y sus productos.`, "danger");
     }
   };
 
   const handleUpdateBrand = async () => {
     const brandId = selectedBrandId;
     if (!brandId || !newBrandName.trim()) {
-      setError("Por favor, seleccione una marca y proporcione un nuevo nombre.");
+      showFeedback("Por favor, seleccione una marca y proporcione un nuevo nombre.", "danger");
       return;
     }
 
     const brand = brands.find(b => b.id === parseInt(brandId));
     if (!brand) {
-      setError("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("La marca seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -613,24 +614,24 @@ function AdminProducts({ theme }) {
       setBrands(prev => prev.map(b => b.id === parseInt(brandId) ? { ...b, name: newBrandName } : b));
       setNewBrandName("");
       setSelectedBrandId("");
-      setWarn("Marca y productos asociados actualizados exitosamente.");
+      showFeedback("Marca y productos asociados actualizados exitosamente.", "success");
       await loadOptions();
     } catch (e) {
       console.error("Error actualizando marca", e);
-      setError("Error al actualizar la marca.");
+      showFeedback("Error al actualizar la marca.", "danger");
     }
   };
 
   const handleUpdateCategory = async () => {
     const categoryId = selectedCategoryId;
     if (!categoryId || !newCategoryName.trim()) {
-      setError("Por favor, seleccione una categoría y proporcione un nuevo nombre.");
+      showFeedback("Por favor, seleccione una categoría y proporcione un nuevo nombre.", "danger");
       return;
     }
 
     const category = categories.find(c => c.id === parseInt(categoryId));
     if (!category) {
-      setError("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("La categoría seleccionada no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -648,24 +649,24 @@ function AdminProducts({ theme }) {
       setCategories(prev => prev.map(c => c.id === parseInt(categoryId) ? { ...c, name: newCategoryName } : c));
       setNewCategoryName("");
       setSelectedCategoryId("");
-      setWarn("Categoría y productos asociados actualizados exitosamente.");
+      showFeedback("Categoría y productos asociados actualizados exitosamente.", "success");
       await loadOptions();
     } catch (e) {
       console.error("Error actualizando categoría", e);
-      setError("Error al actualizar la categoría.");
+      showFeedback("Error al actualizar la categoría.", "danger");
     }
   };
 
   const handleUpdateProvider = async () => {
     const providerId = selectedProviderId;
     if (!providerId || !newProviderName.trim()) {
-      setError("Por favor, seleccione un proveedor y proporcione un nuevo nombre.");
+      showFeedback("Por favor, seleccione un proveedor y proporcione un nuevo nombre.", "danger");
       return;
     }
 
     const provider = providers.find(p => p.id === parseInt(providerId));
     if (!provider) {
-      setError("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.");
+      showFeedback("El proveedor seleccionado no existe. Por favor, recargue la página e intente de nuevo.", "danger");
       return;
     }
 
@@ -683,11 +684,11 @@ function AdminProducts({ theme }) {
       setProviders(prev => prev.map(p => p.id === parseInt(providerId) ? { ...p, name: newProviderName } : p));
       setNewProviderName("");
       setSelectedProviderId("");
-      setWarn("Proveedor y productos asociados actualizados exitosamente.");
+      showFeedback("Proveedor y productos asociados actualizados exitosamente.", "success");
       await loadOptions();
     } catch (e) {
       console.error("Error actualizando proveedor", e);
-      setError("Error al actualizar el proveedor.");
+      showFeedback("Error al actualizar el proveedor.", "danger");
     }
   };
 
@@ -697,11 +698,10 @@ function AdminProducts({ theme }) {
         const res = await authFetch(`/api/products/${productId}/`, { method: "DELETE" });
         if (!res.ok) throw new Error("Error al eliminar el producto.");
         setProducts(prev => prev.filter(product => product.id !== productId));
-        setError(null);
-        setWarn("Producto eliminado exitosamente.");
+        showFeedback("Producto eliminado exitosamente.", "success");
       } catch (e) {
         console.error("Error eliminando producto", e);
-        setError("Error al eliminar el producto.");
+        showFeedback("Error al eliminar el producto.", "danger");
       }
     }
   };
@@ -713,15 +713,14 @@ function AdminProducts({ theme }) {
   }
 
   const handleSubmitStockMovement = async () => {
-    setError(null); // Limpiar errores previos
 
     // Validaciones básicas de UI
     if (stockFormData.quantity <= 0) {
-      setError("La cantidad debe ser mayir a 0.")
+      showFeedback("La cantidad debe ser mayir a 0.", "danger")
       return;
     }
     if (!stockFormData.reason.trim()) {
-      setError("Debe indicar una razón para el movimiento (ej: Compra, Merma, Ajuste).");
+      showFeedback("Debe indicar una razón para el movimiento (ej: Compra, Merma, Ajuste).", "danger");
       return;
     }
 
@@ -745,12 +744,12 @@ function AdminProducts({ theme }) {
             throw new Error(msg);
         }
 
-        setWarn("✅ Movimiento registrado correctamente. Stock actualizado.");
+        showFeedback("✅ Movimiento registrado correctamente. Stock actualizado.", "success");
         setShowStockModal(false);
         await loadProducts();
     } catch (e) {
         console.error(e);
-        setError(e.message);
+        showFeedback(e.message, "danger");
     }
   };
 
@@ -766,8 +765,6 @@ function AdminProducts({ theme }) {
         </div>
       ) : (
         <>
-          {error && <Alert variant="danger">{error}</Alert>}
-          {warn && <Alert variant="warning">{warn}</Alert>}
 
           <div className="mb-4">
             <Button variant="outline-primary" className="me-2" onClick={() => { setNewBrandName(""); setShowBrandModal(true); setSelectedBrandId(""); }}>
@@ -1067,7 +1064,6 @@ function AdminProducts({ theme }) {
             <Modal.Body>
               <Form>
                 <Row className="g-3">
-                  {error && <Alert variant="danger">{error}</Alert>}
                   <Col md={6}>
                     <Form.Group>
                       <Form.Label>Nombre Comercial</Form.Label>
@@ -1468,6 +1464,25 @@ function AdminProducts({ theme }) {
           </Modal>
         </>
       )}
+      {/* --- SISTEMA DE NOTIFICACIONES FLOTANTES (TOASTS) --- */}
+      <ToastContainer position="top-end" className="p-3" style={{ zIndex: 1060, position: 'fixed' }}>
+        <Toast 
+          onClose={() => setToastConfig({ ...toastConfig, show: false })} 
+          show={toastConfig.show} 
+          delay={5000} 
+          autohide
+          bg={toastConfig.variant}
+        >
+          <Toast.Header closeButton={true}>
+            <strong className="me-auto">
+                {toastConfig.variant === 'danger' ? 'Error' : toastConfig.variant === 'success' ? 'Éxito' : 'Atención'}
+            </strong>
+          </Toast.Header>
+          <Toast.Body className={toastConfig.variant === 'light' ? 'text-dark' : 'text-white'}>
+            {toastConfig.message}
+          </Toast.Body>
+        </Toast>
+      </ToastContainer>
     </div>
   );
 }
