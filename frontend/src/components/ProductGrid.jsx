@@ -1,6 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Modal, Form, Button, Pagination, Card, Badge, Container, Row, Col, Spinner, Alert, Offcanvas, InputGroup, Toast, ToastContainer, Table } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const ProductGrid = () => {
   const { authFetch } = useAuth();
@@ -28,6 +48,8 @@ const ProductGrid = () => {
   const [saleQuantity, setSaleQuantity] = useState(1);
   const [saleReason, setSaleReason] = useState("");
   const [saleLoading, setSaleLoading] = useState(false);
+
+  const [forecastData, setForecastData] = useState(null);
 
   // Imagen por defecto profesional
   const defaultImage = 'https://via.placeholder.com/400x400?text=Producto+Sin+Imagen';
@@ -187,6 +209,29 @@ const ProductGrid = () => {
     </Row>
   );
 
+  const loadForecast = async (id) => {
+    setForecastData(null);
+    try {
+      const res = await authFetch(`/api/products/${id}/forecast/`);
+      const data = await res.json();
+      if (data.status === 'success') {
+        setForecastData(data);
+      }
+    } catch (e) {
+        console.error("Error cargando predicción:", e)
+    }
+  };
+
+  const handlePrevImage = () => {
+    if (!modalData?.images) return;
+    setCurrentImageIndex((prev) => (prev === 0 ? modalData.images.length - 1 : prev - 1));
+  };
+
+  const handleNextImage = () => {
+    if (!modalData?.images) return;
+    setCurrentImageIndex((prev) => (prev === modalData.images.length - 1 ? 0 : prev + 1));
+  };
+
   return (
     <Container className="py-4 min-vh-100 bg-body-tertiary transition-colors">
       
@@ -217,7 +262,7 @@ const ProductGrid = () => {
             <Row className="g-3 g-xl-4">
               {paginatedProducts.map(p => (
                 <Col key={p.id} xs={6} md={4} lg={3}>
-                  <Card className="h-100 shadow-sm border-0 overflow-hidden bg-body product-card" style={{cursor:'pointer', transition: 'transform 0.2s'}} onClick={() => { setModalData(p); setCurrentImageIndex(0); setShowModal(true); }}>
+                  <Card className="h-100 shadow-sm border-0 overflow-hidden bg-body product-card" style={{cursor:'pointer', transition: 'transform 0.2s'}} onClick={() => { setModalData(p); setCurrentImageIndex(0); setShowModal(true); loadForecast(p.id); }}>
                     <div className="position-relative text-center p-3 bg-body-tertiary" style={{height: '200px'}}>
                       <Card.Img variant="top" src={p.imagen_principal} className="h-100 w-auto" style={{objectFit: 'contain', maxWidth: '100%'}} />
                       <div className="position-absolute top-0 start-0 m-2">
@@ -275,18 +320,111 @@ const ProductGrid = () => {
             </Modal.Header>
             <Modal.Body className="p-4">
                 <Row>
-                    {/* COLUMNA IZQUIERDA: IMAGENES */}
-                    <Col lg={5} className="text-center mb-4 mb-lg-0 border-end border-secondary-subtle">
-                        <div className="bg-body-tertiary border border-secondary-subtle rounded p-4 mb-3 d-flex align-items-center justify-content-center" style={{height: 400}}>
-                            <img src={modalData.images[currentImageIndex] || defaultImage} className="img-fluid" style={{maxHeight: '100%', objectFit: 'contain'}} alt="Producto" />
+                    {/* --- COLUMNA IZQUIERDA: IMAGEN + GRÁFICO --- */}
+                    <Col lg={5} className="d-flex flex-column gap-3">
+                        
+                        {/* 1. SECCIÓN DE IMAGEN (Carrusel Restaurado) */}
+                        <div className="bg-light p-3 rounded d-flex align-items-center justify-content-center overflow-hidden position-relative shadow-sm" style={{ height: '350px' }}>
+                            {modalData.images && modalData.images.length > 0 ? (
+                                <>
+                                    <img
+                                        src={modalData.images[currentImageIndex] || defaultImage} // Usa imagen actual o default
+                                        alt={modalData.nombre_comercial}
+                                        className="img-fluid rounded"
+                                        style={{ maxHeight: '100%', objectFit: 'contain' }}
+                                    />
+                                    {modalData.images.length > 1 && (
+                                        <>
+                                            {/* Botón Anterior */}
+                                            <Button
+                                                variant="light"
+                                                className="position-absolute start-0 top-50 translate-middle-y ms-2 rounded-circle shadow-sm opacity-75"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
+                                            >
+                                                <i className="bi bi-chevron-left"></i>
+                                            </Button>
+                                            {/* Botón Siguiente */}
+                                            <Button
+                                                variant="light"
+                                                className="position-absolute end-0 top-50 translate-middle-y me-2 rounded-circle shadow-sm opacity-75"
+                                                size="sm"
+                                                onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
+                                            >
+                                                <i className="bi bi-chevron-right"></i>
+                                            </Button>
+                                            {/* Indicadores */}
+                                            <div className="position-absolute bottom-0 start-50 translate-middle-x mb-2 d-flex gap-1">
+                                                {modalData.images.map((_, idx) => (
+                                                    <span 
+                                                        key={idx} 
+                                                        className={`rounded-circle ${idx === currentImageIndex ? 'bg-primary' : 'bg-secondary'}`} 
+                                                        style={{width: '8px', height: '8px', opacity: idx === currentImageIndex ? 1 : 0.5}}
+                                                    ></span>
+                                                ))}
+                                            </div>
+                                        </>
+                                    )}
+                                </>
+                            ) : (
+                                // Fallback si no hay imágenes en el array pero sí una principal
+                                <img 
+                                    src={modalData.imagen_principal || defaultImage} 
+                                    alt={modalData.nombre_comercial}
+                                    className="img-fluid rounded"
+                                    style={{ maxHeight: '100%', objectFit: 'contain' }}
+                                />
+                            )}
                         </div>
-                        {modalData.images.length > 1 && (
-                            <div className="d-flex gap-2 justify-content-center overflow-auto">
-                                {modalData.images.map((img, i) => (
-                                    <div key={i} className={`border rounded p-1 bg-body ${currentImageIndex === i ? 'border-primary' : 'border-secondary-subtle'}`} style={{width: 70, height: 70, cursor: 'pointer'}} onClick={() => setCurrentImageIndex(i)}>
-                                        <img src={img} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="thumb"/>
+
+                        {/* 2. SECCIÓN DE INTELIGENCIA DE NEGOCIO (Gráfico) */}
+                        {forecastData ? (
+                            <div className="alert alert-info border-0 shadow-sm m-0">
+                                <h6 className="fw-bold text-info-emphasis mb-2" style={{fontSize: '0.9rem'}}>
+                                    <i className="bi bi-graph-up-arrow me-2"></i>Predicción de Stock (IA)
+                                </h6>
+                                <div className="d-flex justify-content-between align-items-center mb-2 px-1 small">
+                                    <div>
+                                        <span className="text-muted d-block" style={{fontSize: '0.8rem'}}>Velocidad</span>
+                                        <strong>{forecastData.burn_rate} un/día</strong>
                                     </div>
-                                ))}
+                                    <div className="text-end">
+                                        <span className="text-muted d-block" style={{fontSize: '0.8rem'}}>Quiebre Estimado</span>
+                                        <strong className="text-danger">{forecastData.estimated_stockout}</strong>
+                                    </div>
+                                </div>
+                                
+                                <div className="bg-white p-1 rounded" style={{ height: '120px' }}>
+                                    <Line 
+                                        data={{
+                                            labels: forecastData.chart_data.labels,
+                                            datasets: [{
+                                                label: 'Ventas Diarias',
+                                                data: forecastData.chart_data.values,
+                                                borderColor: '#0dcaf0',
+                                                backgroundColor: 'rgba(13, 202, 240, 0.5)',
+                                                tension: 0.3,
+                                                pointRadius: 3,
+                                                pointBackgroundColor: '#fff',
+                                                borderWidth: 2
+                                            }]
+                                        }}
+                                        options={{
+                                            responsive: true,
+                                            maintainAspectRatio: false,
+                                            plugins: { legend: { display: false } },
+                                            scales: { 
+                                                x: { grid: { display: false }, ticks: { font: { size: 9 } } }, 
+                                                y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } } 
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="alert alert-light border shadow-sm m-0 d-flex align-items-center text-muted p-2">
+                                <Spinner animation="border" size="sm" variant="secondary" className="me-2" />
+                                <small style={{fontSize: '0.85rem'}}>Analizando tendencias...</small>
                             </div>
                         )}
                     </Col>

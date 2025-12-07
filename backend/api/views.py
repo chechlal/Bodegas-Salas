@@ -8,7 +8,12 @@ from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from companies.permissions import IsAdminOrReadOnly, IsSellerUser, IsSellerUserOrAdmin
-from datetime import datetime
+from datetime import datetime, timedelta, date
+from django.db.models.functions import TruncDate
+from django.db.models import Sum
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+import numpy as np
 import os
 import google.generativeai as genai
 
@@ -138,6 +143,54 @@ class ProductViewSet(viewsets.ModelViewSet):
         except Exception as e:
             print(f"Error IA: {e}")
             return Response({"error": "Error al conectar con la IA"}, status=500)
+        
+    @action(detail=True, methods=['get'], url_path='forecast')
+    def forecast(self, request, pk=None):
+        product = self.get_object()
+
+        movements = StockMovement.objects.filter(
+            product=product,
+            movement_type='OUT'
+        ).annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('quantity')).order_by('date')
+
+        if not movements or len(movements) < 2:
+            return Response({
+                "status": "insufficient_data",
+                "message": "Necesito al menos 2 días de ventas para predecir el futuro."
+            })
+        
+        df = pd.DataFrame(movements)
+        df['days_ordinal'] = pd.to_datetime(df['date']).map(date.toordinal)
+
+        X = df[['days_ordinal']]
+        y = df['total']
+
+        model = LinearRegression()
+        model.fit(X, y)
+
+        velocidad_venta = model.coef_[0]
+
+        velocity = abs(velocidad_venta) if velocidad_venta != 0 else 0.1
+
+        current_stock = product.stock
+        dias_para_agotar = int(current_stock / velocity)
+        fecha_estimada = date.today() + timedelta(days=dias_para_agotar)
+
+        labels = [m['date'].strftime('%d/%m') for m in movements]
+        data_points = [m['total'] for m in movements]
+
+        return Response({
+            "status": "success",
+            "product": product.nombre_comercial,
+            "current_stock": current_stock,
+            "burn_rate": round(velocity, 2),
+            "days_left": dias_para_agotar,
+            "estimated_stockout": fecha_estimada.strftime('%d/%m/%Y'),
+            "chart_data": {
+                "labels": labels,
+                "values": data_points
+            }
+        })
 
 class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
