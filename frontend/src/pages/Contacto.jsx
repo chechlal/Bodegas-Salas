@@ -3,9 +3,9 @@ import { Container, Row, Col, Card, Form, Button } from 'react-bootstrap';
 
 const Contacto = () => {
   const team = [
-    { name: 'Rafael Salas', role: 'Gerente General', email: 'rafael@bodegassalas.cl', icon: 'bi-briefcase-fill' },
-    { name: 'Álvaro Casanova', role: 'Jefe de Operaciones', email: 'alvaro@bodegassalas.cl', icon: 'bi-gear-fill' },
-    { name: 'Claudio Pérez', role: 'Ingeniero de Software', email: 'claudio@bodegassalas.cl', icon: 'bi-code-slash' },
+    { name: 'Rafael Salas', role: 'Jefe de Proyecto', email: 'rafael@bodegassalas.cl', icon: 'bi-briefcase-fill' },
+    { name: 'Álvaro Casanova', role: 'Desarrollador Web', email: 'alvaro@bodegassalas.cl', icon: 'bi-gear-fill' },
+    { name: 'Claudio Pérez', role: 'Analista Funcional', email: 'claudio@bodegassalas.cl', icon: 'bi-code-slash' },
   ];
 
   return (
