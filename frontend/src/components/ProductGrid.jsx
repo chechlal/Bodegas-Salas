@@ -51,6 +51,10 @@ const ProductGrid = () => {
 
   const [forecastData, setForecastData] = useState(null);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterValues, itemsPerPage]);
+
   // Imagen por defecto profesional
   const defaultImage = 'https://via.placeholder.com/400x400?text=Producto+Sin+Imagen';
 
@@ -458,7 +462,7 @@ const ProductGrid = () => {
 
                         <div className="d-grid gap-2 d-md-flex mt-auto">
                             {/* BOTÓN COPIAR - ESTILO PROFESIONAL */}
-                            <Button variant="outline-dark" size="lg" className="flex-grow-1 fw-bold border-2" onClick={(e) => handleCopyPimSheet(e, modalData.id)}>
+                            <Button variant="outline-secondary" size="lg" className="flex-grow-1 fw-bold border-2" onClick={(e) => handleCopyPimSheet(e, modalData.id)}>
                                 <i className="bi bi-file-earmark-text me-2"></i> Copiar Ficha Técnica
                             </Button>
                             <Button variant="primary" size="lg" className="flex-grow-1 fw-bold" onClick={(e) => { setShowModal(false); openSaleModal(e, modalData); }} disabled={modalData.stock <= 0}>
