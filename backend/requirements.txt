@@ -80,8 +80,6 @@ PySide6_Essentials==6.9.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 pytz==2025.2
-pywin32==310
-pywin32-ctypes==0.2.3
 QDarkStyle==3.2.3
 QtPy==2.4.3
 redis==6.0.0
