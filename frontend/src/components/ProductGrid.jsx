@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Modal, Form, Button, Pagination, Card, Badge, Container, Row, Col, Spinner, Alert, Offcanvas, Toast, ToastContainer, InputGroup } from 'react-bootstrap';
+import { Modal, Form, Button, Pagination, Card, Badge, Container, Row, Col, Spinner, Alert, Offcanvas, InputGroup, Toast, ToastContainer } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 
 const ProductGrid = () => {
@@ -29,6 +29,13 @@ const ProductGrid = () => {
   const [modalData, setModalData] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
+  // --- Estados para Modal de Venta ---
+  const [showSaleModal, setShowSaleModal] = useState(false);
+  const [saleProduct, setSaleProduct] = useState(null);
+  const [saleQuantity, setSaleQuantity] = useState(1);
+  const [saleReason, setSaleReason] = useState("");
+  const [saleLoading, setSaleLoading] = useState(false);
+
   const defaultImage = 'https://via.placeholder.com/300x300?text=Sin+Imagen';
 
   useEffect(() => {
@@ -36,7 +43,7 @@ const ProductGrid = () => {
     // eslint-disable-next-line
   }, []);
 
-  // --- HANDLERS UI (LOS QUE FALTABAN) ---
+  // --- HANDLERS UI ---
   const handleCloseFilters = () => setShowFilters(false);
   const handleShowFilters = () => setShowFilters(true);
   const showFeedback = (message, variant = 'success') => setToastConfig({ show: true, message, variant });
@@ -81,14 +88,54 @@ const ProductGrid = () => {
     }
   };
 
+  // --- Lógica de Venta ---
+  const openSaleModal = (e, product) => {
+    e.stopPropagation();
+    setSaleProduct(product);
+    setSaleQuantity(1);
+    setSaleReason("Venta rápida en sala");
+    setShowSaleModal(true);
+  };
+
+  const handleProcessSale = async () => {
+    if (saleQuantity <= 0) return showFeedback("La cantidad debe ser mayor a 0", "warning");
+    if (saleQuantity > saleProduct.stock) return showFeedback("No hay suficiente stock disponible", "danger");
+    
+    setSaleLoading(true);
+    try {
+      const res = await authFetch('/api/stock-movements/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product: saleProduct.id,
+          quantity: parseInt(saleQuantity),
+          movement_type: 'OUT',
+          reason: saleReason
+        })
+      });
+
+      if (res.ok) {
+        showFeedback(`✅ Venta registrada: -${saleQuantity} de ${saleProduct.nombre_comercial}`, "success");
+        setShowSaleModal(false);
+        loadProducts();
+      } else {
+        const errData = await res.json();
+        showFeedback(errData.detail || "Error al procesar venta", "danger");
+      }
+    } catch (error) {
+      showFeedback("Error de conexión al vender", "danger");
+    } finally {
+      setSaleLoading(false);
+    }
+  };
+
   // --- Helpers ---
   const formatPrice = (price) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(price || 0);
   
   const getStatusBadge = (stock) => {
     if (stock === 0) return <Badge bg="danger">⛔ Agotado</Badge>;
-    if (stock < 5) return <Badge bg="danger" className="text-white">🔥 ¡Quedan {stock}!</Badge>;
-    if (stock < 10) return <Badge bg="warning" text="dark">⚠️ Pocas Unidades</Badge>;
-    return <Badge bg="success">✅ Disponible ({stock})</Badge>;
+    if (stock < 5) return <Badge bg="warning" text="dark">⚠️ Quedan {stock}</Badge>;
+    return <Badge bg="success" className="bg-opacity-75 text-white">✅ Stock: {stock}</Badge>;
   };
 
   const getUniqueValues = (key) => [...new Set(products.map((item) => item[key]))].filter(Boolean).sort();
@@ -152,7 +199,7 @@ const ProductGrid = () => {
         <InputGroup>
           <InputGroup.Text className="bg-body-secondary border-end-0"><i className="bi bi-search"></i></InputGroup.Text>
           <Form.Control 
-            placeholder="Buscar por Nombre, SKU, EAN..." 
+            placeholder="Buscar..." 
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             className="border-start-0"
@@ -161,13 +208,13 @@ const ProductGrid = () => {
       </Col>
       <Col xs={6} lg={2}>
         <Form.Select value={filterValues.marca || ''} onChange={e => handleFilterChange('marca', e.target.value)}>
-          <option value="">Todas las Marcas</option>
+          <option value="">Marcas</option>
           {getUniqueValues('marca').map(m => <option key={m} value={m}>{m}</option>)}
         </Form.Select>
       </Col>
       <Col xs={6} lg={2}>
         <Form.Select value={filterValues.categoria || ''} onChange={e => handleFilterChange('categoria', e.target.value)}>
-          <option value="">Todas las Categorías</option>
+          <option value="">Categorías</option>
           {getUniqueValues('categoria').map(c => <option key={c} value={c}>{c}</option>)}
         </Form.Select>
       </Col>
@@ -184,36 +231,30 @@ const ProductGrid = () => {
         </div>
       </Col>
       <Col xs={6} lg={2}>
-        <Row className="g-1">
-           <Col xs={6}>
-            <Form.Select value={itemsPerPage} onChange={(e) => { setItemsPerPage(e.target.value === 'Todos' ? 'Todos' : parseInt(e.target.value)); setCurrentPage(1); }}>
-                <option value="12">12</option>
-                <option value="24">24</option>
-                <option value="48">48</option>
-                <option value="96">96</option>
-                <option value="Todos">Todos</option>
-            </Form.Select>
-          </Col>
-          <Col xs={6}>
-             <div className="d-flex gap-1">
-                <Button variant={viewMode === 'grid' ? 'primary' : 'outline-primary'} size="sm" className="w-50" onClick={() => setViewMode('grid')}><i className="bi bi-grid"></i></Button>
-                <Button variant={viewMode === 'list' ? 'primary' : 'outline-primary'} size="sm" className="w-50" onClick={() => setViewMode('list')}><i className="bi bi-list-ul"></i></Button>
-             </div>
-          </Col>
-        </Row>
+        <Form.Select value={itemsPerPage} onChange={(e) => { setItemsPerPage(e.target.value === 'Todos' ? 'Todos' : parseInt(e.target.value)); setCurrentPage(1); }}>
+            <option value="12">12 por pág.</option>
+            <option value="24">24 por pág.</option>
+            <option value="48">48 por pág.</option>
+            <option value="Todos">Todos</option>
+        </Form.Select>
       </Col>
     </Row>
   );
 
   return (
-    <Container fluid className="py-4 bg-body-tertiary min-vh-100">
+    // CAMBIO 1: Usamos Container normal en vez de fluid para centrar y dar márgenes
+    <Container className="py-4 min-vh-100">
       
       {/* HEADER FILTROS */}
-      <div className="bg-body p-3 rounded shadow-sm mb-4 border">
+      <div className="bg-white p-3 rounded shadow-sm mb-4 border">
         <div className="d-flex justify-content-between align-items-center mb-3">
-            <h4 className="fw-bold m-0 text-primary"><i className="bi bi-shop me-2"></i>Catálogo Digital</h4>
+            <h5 className="fw-bold m-0 text-dark"><i className="bi bi-grid-fill me-2 text-primary"></i>Catálogo</h5>
             <div>
-                <Button variant="link" className="text-decoration-none p-0 me-3" onClick={clearAllFilters}>Limpiar Filtros</Button>
+                {Object.keys(filterValues).length > 0 || searchTerm ? (
+                    <Button variant="link" className="text-decoration-none p-0 me-3 text-danger" onClick={clearAllFilters} size="sm">
+                        <i className="bi bi-x-circle"></i> Limpiar
+                    </Button>
+                ) : null}
                 <span className="text-muted small">{filteredAndSortedProducts.length} productos</span>
             </div>
         </div>
@@ -230,36 +271,52 @@ const ProductGrid = () => {
       ) : (
         <>
           {paginatedProducts.length === 0 ? (
-            <Alert variant="info" className="text-center shadow-sm">No hay productos que coincidan con la búsqueda.</Alert>
+            <Alert variant="light" className="text-center border shadow-sm py-5">
+                <i className="bi bi-search fs-1 text-muted d-block mb-3"></i>
+                No se encontraron productos con esos filtros.
+            </Alert>
           ) : viewMode === 'grid' ? (
             
-            /* VISTA GRID */
+            /* VISTA GRID MEJORADA */
             <Row className="g-3 g-xl-4">
               {paginatedProducts.map(p => (
-                <Col key={p.id} xs={6} md={4} lg={3} xl={2}>
-                  <Card className="h-100 shadow-sm product-card border-0" style={{cursor:'pointer'}} onClick={() => { setModalData(p); setCurrentImageIndex(0); setShowModal(true); }}>
-                    <div className="position-relative bg-body-secondary text-center p-2 p-md-3" style={{height: '180px'}}>
+                <Col key={p.id} xs={6} md={4} lg={3}>
+                  <Card className="h-100 shadow-sm product-card border-0 overflow-hidden" style={{cursor:'pointer', transition: 'transform 0.2s'}} onClick={() => { setModalData(p); setCurrentImageIndex(0); setShowModal(true); }}>
+                    
+                    <div className="position-relative text-center p-3 bg-white" style={{height: '200px'}}>
                       <Card.Img variant="top" src={p.imagen_principal} className="h-100 w-auto" style={{objectFit: 'contain', maxWidth: '100%'}} />
-                      <div className="position-absolute top-0 end-0 m-1">
-                         <Badge bg="dark" className="opacity-75 shadow-sm" style={{fontWeight: 'normal'}}>{p.marca}</Badge>
+                      <div className="position-absolute top-0 start-0 m-2">
+                         <Badge bg="light" text="dark" className="border shadow-sm">{p.marca}</Badge>
                       </div>
                     </div>
-                    <Card.Body className="d-flex flex-column p-2 p-md-3 bg-body">
+
+                    <Card.Body className="d-flex flex-column p-3 bg-light border-top">
                       <div className="mb-2">
-                        <small className="text-muted text-uppercase fw-bold" style={{fontSize: '0.65rem'}}>{p.categoria}</small>
-                        <Card.Title className="fw-bold fs-6 text-truncate mb-1" title={p.nombre_comercial}>{p.nombre_comercial}</Card.Title>
-                        <div className="d-flex justify-content-between align-items-center">
-                            <small className="text-muted font-monospace" style={{fontSize:'0.75rem'}}>{p.sku}</small>
-                        </div>
+                        <small className="text-muted text-uppercase fw-bold" style={{fontSize: '0.7rem', letterSpacing: '0.5px'}}>{p.categoria}</small>
+                        <Card.Title className="fw-bold fs-6 text-truncate mb-1 text-dark" title={p.nombre_comercial}>{p.nombre_comercial}</Card.Title>
+                        <small className="text-muted font-monospace" style={{fontSize:'0.75rem'}}>{p.sku}</small>
                       </div>
-                      <div className="mt-auto pt-2 border-top">
-                        <div className="d-flex justify-content-between align-items-center mb-2">
-                            <h5 className="text-primary fw-bold mb-0" style={{fontSize:'1rem'}}>{formatPrice(p.precio_venta)}</h5>
+                      
+                      <div className="mt-auto pt-3">
+                        <div className="d-flex justify-content-between align-items-center mb-3">
+                            <h5 className="text-primary fw-bold mb-0">{formatPrice(p.precio_venta)}</h5>
+                            {/* CAMBIO 2: Badge de stock movido aquí arriba */}
+                            <div style={{transform: 'scale(0.9)', transformOrigin: 'right center'}}>{getStatusBadge(p.stock)}</div>
                         </div>
-                        <div className="d-flex justify-content-between align-items-center">
-                            <div style={{transform: 'scale(0.85)', transformOrigin: 'left center'}}>{getStatusBadge(p.stock)}</div>
-                            <Button variant="outline-success" size="sm" className="rounded-circle p-0 d-flex align-items-center justify-content-center" style={{width:28, height:28}} title="Copiar Ficha" onClick={(e) => handleCopyPimSheet(e, p.id)}>
-                                <i className="bi bi-clipboard-check"></i>
+                        
+                        {/* CAMBIO 3: Botones de acción rediseñados */}
+                        <div className="d-flex gap-2">
+                            <Button 
+                                variant="primary" 
+                                className="flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2" 
+                                title="Registrar Venta" 
+                                onClick={(e) => openSaleModal(e, p)}
+                                disabled={p.stock <= 0}
+                            >
+                                <i className="bi bi-cart-check-fill"></i> VENDER
+                            </Button>
+                            <Button variant="outline-secondary" className="px-3" title="Copiar Ficha" onClick={(e) => handleCopyPimSheet(e, p.id)}>
+                                <i className="bi bi-clipboard"></i>
                             </Button>
                         </div>
                       </div>
@@ -269,37 +326,49 @@ const ProductGrid = () => {
               ))}
             </Row>
           ) : (
-            /* VISTA LISTA */
-            <Card className="border-0 shadow-sm overflow-hidden bg-body">
+            /* VISTA LISTA (Mantenida simple) */
+            <Card className="border-0 shadow-sm overflow-hidden bg-white">
                 <div className="table-responsive">
                     <table className="table table-hover align-middle mb-0">
-                        <thead className="table-light">
+                        <thead className="table-light small text-muted text-uppercase">
                             <tr>
-                                <th style={{width: 60}}>Img</th>
+                                <th style={{width: 60}}></th>
                                 <th>Producto</th>
-                                <th className="d-none d-md-table-cell">Marca/Cat</th>
-                                <th className="d-none d-sm-table-cell">SKU</th>
+                                <th className="d-none d-md-table-cell">Detalles</th>
                                 <th className="text-end">Precio</th>
-                                <th className="text-center">Stock</th>
-                                <th className="text-end">Acción</th>
+                                <th className="text-center">Disponibilidad</th>
+                                <th className="text-end" style={{minWidth: 120}}>Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedProducts.map(p => (
                                 <tr key={p.id} style={{cursor: 'pointer'}} onClick={() => { setModalData(p); setCurrentImageIndex(0); setShowModal(true); }}>
-                                    <td><div className="bg-body-secondary rounded p-1" style={{width:40, height:40}}><img src={p.imagen_principal} alt="" style={{width: '100%', height: '100%', objectFit: 'contain'}} /></div></td>
+                                    <td><div className="bg-white border rounded p-1 d-flex align-items-center justify-content-center" style={{width:48, height:48}}><img src={p.imagen_principal} alt="" style={{maxWidth: '100%', maxHeight: '100%', objectFit: 'contain'}} /></div></td>
                                     <td>
-                                        <div className="fw-bold text-truncate" style={{maxWidth: 200}}>{p.nombre_comercial}</div>
-                                        <div className="d-md-none small text-muted">{p.marca}</div>
+                                        <div className="fw-bold text-truncate text-dark" style={{maxWidth: 220}}>{p.nombre_comercial}</div>
+                                        <div className="small text-muted font-monospace d-md-none">{p.sku}</div>
                                     </td>
-                                    <td className="d-none d-md-table-cell"><div className="small">{p.marca}</div><div className="text-muted small">{p.categoria}</div></td>
-                                    <td className="d-none d-sm-table-cell font-monospace small">{p.sku}</td>
-                                    <td className="text-end fw-bold text-success">{formatPrice(p.precio_venta)}</td>
-                                    <td className="text-center">{getStatusBadge(p.stock)}</td>
+                                    <td className="d-none d-md-table-cell small">
+                                        <div>{p.marca}</div>
+                                        <div className="text-muted font-monospace">{p.sku}</div>
+                                    </td>
+                                    <td className="text-end fw-bold text-primary">{formatPrice(p.precio_venta)}</td>
+                                    <td className="text-center"><div style={{transform: 'scale(0.9)'}}>{getStatusBadge(p.stock)}</div></td>
                                     <td className="text-end">
-                                        <Button variant="outline-success" size="sm" onClick={(e) => handleCopyPimSheet(e, p.id)} title="Copiar Ficha">
-                                            <i className="bi bi-clipboard"></i>
-                                        </Button>
+                                        <div className="d-flex justify-content-end gap-2">
+                                            <Button variant="outline-secondary" size="sm" title="Copiar Ficha" onClick={(e) => handleCopyPimSheet(e, p.id)}>
+                                                <i className="bi bi-clipboard"></i>
+                                            </Button>
+                                            <Button 
+                                                variant="primary" 
+                                                size="sm" 
+                                                className="fw-bold px-3"
+                                                onClick={(e) => openSaleModal(e, p)}
+                                                disabled={p.stock <= 0}
+                                            >
+                                                VENDER
+                                            </Button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -311,8 +380,8 @@ const ProductGrid = () => {
 
           {/* Paginación */}
           {totalPages > 1 && (
-            <div className="d-flex justify-content-center mt-4">
-               <Pagination>
+            <div className="d-flex justify-content-center mt-5">
+               <Pagination className="shadow-sm">
                  <Pagination.Prev onClick={() => setCurrentPage(c => Math.max(1, c - 1))} disabled={currentPage === 1} />
                  {[...Array(totalPages)].map((_, i) => {
                     if (i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 1 && i + 1 <= currentPage + 1)) {
@@ -329,57 +398,60 @@ const ProductGrid = () => {
         </>
       )}
 
-      {/* --- MODAL DETALLE --- */}
+      {/* --- MODAL DETALLE (Actualizado visualmente) --- */}
       {modalData && (
-        <Modal show={showModal} onHide={() => setShowModal(false)} centered size="lg" contentClassName="bg-body">
-            <Modal.Header closeButton className="border-bottom">
-                <Modal.Title className="fs-5 fw-bold">{modalData.nombre_comercial}</Modal.Title>
+        <Modal show={showModal} onHide={() => setShowModal(false)} centered size="lg">
+            <Modal.Header closeButton className="border-bottom-0 pb-0">
+                <small className="text-muted text-uppercase">{modalData.categoria}</small>
             </Modal.Header>
-            <Modal.Body>
+            <Modal.Body className="pt-0">
+                <h3 className="fw-bold mb-3 text-dark">{modalData.nombre_comercial}</h3>
                 <Row>
-                    <Col md={5} className="text-center mb-3">
-                        <div className="border rounded p-2 mb-2 bg-body-secondary position-relative">
-                            <img src={modalData.images[currentImageIndex] || defaultImage} className="img-fluid" style={{maxHeight: 300, objectFit: 'contain'}} alt="Producto" />
+                    <Col md={6} className="text-center mb-4 mb-md-0">
+                        <div className="bg-white border rounded p-3 mb-3 d-flex align-items-center justify-content-center" style={{height: 300}}>
+                            <img src={modalData.images[currentImageIndex] || defaultImage} className="img-fluid" style={{maxHeight: '100%', objectFit: 'contain'}} alt="Producto" />
                         </div>
                         {modalData.images.length > 1 && (
-                            <div className="d-flex gap-2 justify-content-center overflow-auto pb-2">
+                            <div className="d-flex gap-2 justify-content-center overflow-auto">
                                 {modalData.images.map((img, i) => (
-                                    <img 
-                                        key={i} src={img} 
-                                        style={{width: 50, height: 50, objectFit: 'cover', cursor: 'pointer', border: currentImageIndex === i ? '2px solid var(--bs-primary)' : '1px solid #dee2e6'}} 
-                                        className="rounded bg-body-secondary"
+                                    <div 
+                                        key={i}
+                                        className={`border rounded p-1 bg-white ${currentImageIndex === i ? 'border-primary' : ''}`}
+                                        style={{width: 60, height: 60, cursor: 'pointer'}}
                                         onClick={() => setCurrentImageIndex(i)}
-                                        alt="thumb"
-                                    />
+                                    >
+                                        <img src={img} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="thumb"/>
+                                    </div>
                                 ))}
                             </div>
                         )}
                     </Col>
-                    <Col md={7}>
-                        <div className="d-flex justify-content-between align-items-start mb-3">
-                            <div>
-                                <Badge bg="info" text="dark" className="me-2">{modalData.marca}</Badge>
-                                <Badge bg="secondary">{modalData.categoria}</Badge>
-                            </div>
-                            <h3 className="text-success fw-bold m-0">{formatPrice(modalData.precio_venta)}</h3>
+                    <Col md={6}>
+                        <div className="d-flex align-items-center justify-content-between mb-3">
+                            <h2 className="text-primary fw-bold m-0">{formatPrice(modalData.precio_venta)}</h2>
+                            <div>{getStatusBadge(modalData.stock)}</div>
+                        </div>
+
+                        <div className="mb-4">
+                            <h6 className="fw-bold">Descripción</h6>
+                            <p className="text-muted">{modalData.descripcion}</p>
                         </div>
                         
-                        <p className="text-muted small mb-4">{modalData.descripcion}</p>
-                        
-                        <div className="bg-body-secondary p-3 rounded mb-3 border">
-                            <Row className="g-2 small">
+                        <div className="bg-light p-3 rounded mb-4 border small">
+                            <Row className="g-2">
+                                <Col xs={6}><strong>Marca:</strong> {modalData.marca}</Col>
                                 <Col xs={6}><strong>SKU:</strong> <span className="font-monospace">{modalData.sku}</span></Col>
-                                <Col xs={6}><strong>EAN:</strong> <span className="font-monospace">{modalData.ean}</span></Col>
                                 <Col xs={6}><strong>Ubicación:</strong> {modalData.lugar_bodega}</Col>
-                                <Col xs={6}><strong>Stock:</strong> {modalData.stock} u.</Col>
                                 <Col xs={6}><strong>Dimensiones:</strong> {modalData.dimensiones}</Col>
-                                <Col xs={6}><strong>Peso:</strong> {modalData.peso} kg</Col>
                             </Row>
                         </div>
 
-                        <div className="d-grid gap-2">
-                            <Button variant="success" onClick={(e) => handleCopyPimSheet(e, modalData.id)}>
-                                <i className="bi bi-whatsapp me-2"></i> Copiar Ficha Técnica
+                        <div className="d-flex gap-2">
+                            <Button variant="primary" size="lg" className="flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2" onClick={(e) => { setShowModal(false); openSaleModal(e, modalData); }} disabled={modalData.stock <= 0}>
+                                <i className="bi bi-cart-check-fill"></i> REGISTRAR VENTA
+                            </Button>
+                            <Button variant="outline-secondary" size="lg" className="px-3" title="Copiar Ficha" onClick={(e) => handleCopyPimSheet(e, modalData.id)}>
+                                <i className="bi bi-clipboard"></i>
                             </Button>
                         </div>
                     </Col>
@@ -388,26 +460,78 @@ const ProductGrid = () => {
         </Modal>
       )}
 
-      {/* --- OFFCANVAS MÓVIL --- */}
-      <Offcanvas show={showFilters} onHide={handleCloseFilters} placement="bottom" className="bg-body h-auto" style={{maxHeight: '90vh'}}>
+      {/* --- MODAL DE VENTA RÁPIDA (Sin cambios funcionales, solo estéticos menores) --- */}
+      <Modal show={showSaleModal} onHide={() => setShowSaleModal(false)} centered backdrop="static" size="sm">
+        <Modal.Header closeButton className="border-bottom-0 pb-0">
+            <Modal.Title className="fs-5 fw-bold">Registrar Venta</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+            {saleProduct && (
+                <>
+                    <div className="d-flex align-items-center gap-3 mb-3 bg-light p-2 rounded border">
+                        <img src={saleProduct.imagen_principal} alt="" style={{width: 50, height: 50, objectFit:'contain'}} className="bg-white rounded border" />
+                        <div className="overflow-hidden">
+                            <div className="fw-bold text-truncate">{saleProduct.nombre_comercial}</div>
+                            <small className="text-muted">Stock actual: {saleProduct.stock}</small>
+                        </div>
+                    </div>
+                    <Form>
+                        <Form.Group className="mb-3">
+                            <Form.Label className="fw-bold small">Cantidad a descontar</Form.Label>
+                            <Form.Control 
+                                type="number" 
+                                min="1" 
+                                max={saleProduct.stock} 
+                                value={saleQuantity} 
+                                onChange={(e) => setSaleQuantity(e.target.value)} 
+                                autoFocus
+                                size="lg"
+                                className="text-center fw-bold text-primary"
+                            />
+                        </Form.Group>
+                        <Form.Group className="mb-3">
+                            <Form.Label className="small">Nota (Opcional)</Form.Label>
+                            <Form.Control 
+                                type="text" 
+                                placeholder="Ej: Venta mostrador..." 
+                                value={saleReason}
+                                onChange={(e) => setSaleReason(e.target.value)}
+                                size="sm"
+                            />
+                        </Form.Group>
+                    </Form>
+                </>
+            )}
+        </Modal.Body>
+        <Modal.Footer className="border-top-0 pt-0">
+            <Button variant="link" className="text-muted text-decoration-none" onClick={() => setShowSaleModal(false)}>Cancelar</Button>
+            <Button variant="primary" className="px-4 fw-bold" onClick={handleProcessSale} disabled={saleLoading || saleQuantity > saleProduct?.stock || saleQuantity <= 0}>
+                {saleLoading ? <Spinner size="sm" animation="border"/> : 'Confirmar'}
+            </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <ToastContainer position="bottom-center" className="p-3" style={{zIndex: 9999}}>
+          <Toast onClose={() => setToastConfig({...toastConfig, show:false})} show={toastConfig.show} delay={3000} autohide bg={toastConfig.variant} className="shadow">
+              <Toast.Body className={`d-flex align-items-center gap-2 ${toastConfig.variant === 'light' ? 'text-dark' : 'text-white'}`}>
+                  <i className={`bi bi-${toastConfig.variant === 'success' ? 'check-circle-fill' : 'exclamation-triangle-fill'}`}></i>
+                  <strong className="me-auto">{toastConfig.message}</strong>
+              </Toast.Body>
+          </Toast>
+      </ToastContainer>
+
+      <Offcanvas show={showFilters} onHide={handleCloseFilters} placement="bottom" className="h-auto rounded-top-4" style={{maxHeight: '85vh'}}>
         <Offcanvas.Header closeButton className="border-bottom">
-          <Offcanvas.Title><i className="bi bi-funnel-fill me-2"></i> Filtros</Offcanvas.Title>
+          <Offcanvas.Title className="fw-bold"><i className="bi bi-funnel-fill me-2"></i>Filtros y Búsqueda</Offcanvas.Title>
         </Offcanvas.Header>
-        <Offcanvas.Body>
+        <Offcanvas.Body className="pb-4">
           {renderFilters()}
           <div className="d-grid gap-2 mt-4">
-             <Button variant="outline-danger" onClick={() => { clearAllFilters(); setShowFilters(false); }}>Limpiar Todo</Button>
-             <Button variant="primary" onClick={() => setShowFilters(false)}>Ver Resultados</Button>
+             <Button variant="primary" size="lg" onClick={() => setShowFilters(false)}>Ver {filteredAndSortedProducts.length} Resultados</Button>
+             <Button variant="outline-danger" onClick={clearAllFilters}>Limpiar Todo</Button>
           </div>
         </Offcanvas.Body>
       </Offcanvas>
-
-      <ToastContainer position="top-end" className="p-3" style={{zIndex: 9999}}>
-          <Toast onClose={() => setToastConfig({...toastConfig, show:false})} show={toastConfig.show} delay={3000} autohide bg={toastConfig.variant}>
-              <Toast.Header><strong className="me-auto">Sistema</strong></Toast.Header>
-              <Toast.Body className={toastConfig.variant === 'light' ? 'text-dark' : 'text-white'}>{toastConfig.message}</Toast.Body>
-          </Toast>
-      </ToastContainer>
 
     </Container>
   );

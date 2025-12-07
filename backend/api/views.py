@@ -56,22 +56,28 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['nombre_comercial', 'precio_venta', 'stock', 'rating', 'marca', 'categoria']
     pagination_class = StandardResultSetPagination
 
-    @action(detail=True, methods=['get'], url_path='pim-sheet')
-    def pim_sheet(self, request, pk=None):
+@action(detail=True, methods=['get'], url_path='pim-sheet')
+def pim_sheet(self, request, pk=None):
         product = self.get_object()
-
         ficha = (
-            f"📦 *FICHA TÉCNICA: {product.nombre_comercial}*\n"
-            f"--------------------------------\n"
-            f"🆔 *SKU:* {product.sku}\n"
-            f"🏷 *Marca:* {product.brand.name}\n"
-            f"📏 *Dimensiones:* {product.dimensiones}\n"
-            f"⚖️ *Peso:* {product.peso} kg\n"
-            f"✅ *Edad Sugerida:* {product.edad_uso or 'N/A'}\n"
-            f"💲 *Precio:* ${product.precio_venta:,.0f}\n"
-            f"--------------------------------\n"
-            f"📝 *Descripción:*\n{product.descripcion}\n"
-            f"\n_Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}_"
+            f"FICHA TÉCNICA DE PRODUCTO\n"
+            f"========================================\n"
+            f"Producto: {product.nombre_comercial}\n"
+            f"Marca:    {product.brand.name}\n"
+            f"SKU:      {product.sku}\n"
+            f"----------------------------------------\n"
+            f"ESPECIFICACIONES:\n"
+            f"- Categoría:   {product.category.name}\n"
+            f"- Dimensiones: {product.dimensiones}\n"
+            f"- Peso:        {product.peso} kg\n"
+            f"- Uso Sugerido: {product.edad_uso or 'N/A'}\n"
+            f"----------------------------------------\n"
+            f"PRECIO LISTA: ${product.precio_venta:,.0f} CLP\n"
+            f"----------------------------------------\n"
+            f"DESCRIPCIÓN:\n"
+            f"{product.descripcion}\n"
+            f"========================================\n"
+            f"Generado por Bodegas Salas ERP - {datetime.now().strftime('%d/%m/%Y')}"
         )
 
         return Response({'text': ficha})

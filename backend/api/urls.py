@@ -8,6 +8,6 @@ router.register(r'categories', CategoryViewSet)
 router.register(r'providers', ProviderViewSet)
 router.register(r'product-images', ProductImageViewSet)
 router.register(r'product-history', ProductHistoryViewSet, basename='product-history')
-router.register(r'movements', StockMovementViewSet)
+router.register(r'stock-movements', StockMovementViewSet)
 
 urlpatterns = router.urls
