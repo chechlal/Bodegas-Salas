@@ -424,29 +424,29 @@ function AdminProducts({ theme }) {
       const { id, originalType, input, entity, name } = deleteConfirm;
       const expected = `eliminar productos con ${entity} "${name}"`;
 
+      // 1. Tu validación de seguridad se mantiene (EXCELENTE)
       if (input !== expected) return showFeedback("La frase de confirmación no coincide", "danger");
 
       try {
-          const param = originalType === 'brand' ? 'brand' : originalType === 'category' ? 'category' : 'provider';
-          const res = await authFetch(`/api/products/?${param}=${id}`);
-          const data = await res.json();
-          const toDelete = data.results || data;
-
-          for (const p of toDelete) {
-              await authFetch(`/api/products/${p.id}/`, { method: "DELETE" });
-          }
-
+          // 2. Simplificación: Ya no borramos productos uno por uno.
+          // Llamamos directo a borrar el Maestro, y el Backend hace la cascada "Soft".
+          
           const endpoint = originalType === 'brand' ? 'brands' : originalType === 'category' ? 'categories' : 'providers';
+          
+          // Esta llamada ahora activa el perform_destroy modificado en Django
           const finalRes = await authFetch(`/api/${endpoint}/${id}/`, { method: "DELETE" });
           
-          if (!finalRes.ok) throw new Error("Error final al borrar");
+          if (!finalRes.ok) throw new Error("Error al descontinuar registros");
 
-          showFeedback(`Limpieza completa: ${entity} y productos asociados eliminados.`, "success");
+          showFeedback(`Operación Exitosa: ${entity} y sus productos han sido descontinuados.`, "success");
           setDeleteConfirm({ ...deleteConfirm, show: false });
+          
+          // Recargamos todo para ver los cambios
           loadAllData();
 
       } catch (e) {
-          showFeedback("Error crítico durante la eliminación", "danger");
+          console.error(e);
+          showFeedback("Error al procesar la solicitud", "danger");
       }
   };
 
@@ -460,7 +460,7 @@ function AdminProducts({ theme }) {
   const submitStock = async () => {
       if (!stockFormData.reason.trim()) return showFeedback("El motivo es obligatorio para auditoría", "warning");
       try {
-          const res = await authFetch('/api/movements/', {
+          const res = await authFetch('/api/stock-movements/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -864,7 +864,7 @@ function AdminProducts({ theme }) {
                       <h2 className="mb-0">{selectedProductForStock?.stock}</h2>
                   </div>
               </div>
-              <Form>
+              <Form onSubmit={(e) => { e.preventDefault(); submitStock(); }}>
                   <div className="btn-group w-100 mb-3" role="group">
                       <input type="radio" className="btn-check" name="btnradio" id="btnradio1" autoComplete="off" checked={stockFormData.movement_type==='IN'} onChange={()=>setStockFormData({...stockFormData, movement_type:'IN'})} />
                       <label className="btn btn-outline-success" htmlFor="btnradio1">ENTRADA (Compra)</label>

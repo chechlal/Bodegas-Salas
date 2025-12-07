@@ -9,6 +9,7 @@ import os
 
 class Brand(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name=_("Nombre de la Marca"))
+    is_active = models.BooleanField(default=True, verbose_name="Activa / Visible")
     history = HistoricalRecords()
 
     def __str__(self):
@@ -21,6 +22,7 @@ class Brand(models.Model):
 
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name=_("Nombre de la Categoría"))
+    is_active = models.BooleanField(default=True, verbose_name="Activa / Visible")
     history = HistoricalRecords()
 
     def __str__(self):
@@ -33,6 +35,7 @@ class Category(models.Model):
 
 class Provider(models.Model):
     name = models.CharField(max_length=200, unique=True, verbose_name=_("Nombre del Proveedor"))
+    is_active = models.BooleanField(default=True, verbose_name="Activa / Visible")
     history = HistoricalRecords()
 
     def __str__(self):
@@ -58,6 +61,7 @@ class Product(models.Model):
     edad_uso = models.CharField(max_length=50, blank=True, null=True, verbose_name=_("Edad de Uso"), help_text=_("Ej: 12+ años"))
     provider = models.ForeignKey(Provider, on_delete=models.PROTECT, verbose_name=_("Proveedor"))
     stock = models.PositiveIntegerField(default=0, verbose_name=_("Stock"))
+    is_active = models.BooleanField(default=True, verbose_name="Activo / Visible")
     precio_venta = models.DecimalField(max_digits=15, decimal_places=0, verbose_name=_("Precio de Venta (CLP)"), validators=[MinValueValidator(0)])
     rating = models.DecimalField(max_digits=3, decimal_places=1, default=0.0, verbose_name=_("Rating"), validators=[MinValueValidator(0), MaxValueValidator(5)])
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Creado en"))
@@ -111,7 +115,7 @@ class StockMovement(models.Model):
         ('OUT', 'Salida (Venta/Merma)'),
     )
 
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='movements', verbose_name=_("Producto"))
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='movements', verbose_name=_("Producto"))
     quantity = models.PositiveIntegerField(verbose_name=_("Cantidad"))
     movement_type = models.CharField(max_length=3, choices=MOVEMENT_TYPES, verbose_name=_("Tipo"))
     reason = models.CharField(max_length=255, verbose_name=_("Razón/Motivo"), blank=True)

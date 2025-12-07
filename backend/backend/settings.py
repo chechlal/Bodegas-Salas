@@ -27,9 +27,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-clave-para-desarrollo-local')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
 ALLOWED_HOSTS = ['*']  # Allow all hosts for development; restrict in production
 
 # Application definition

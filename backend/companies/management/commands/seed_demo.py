@@ -29,31 +29,33 @@ class Command(BaseCommand):
         # 2. LIMPIEZA DE BASE DE DATOS
         self.stdout.write('🧹 Limpiando tablas de BD...')
         
-        # Primero borramos los datos transaccionales y maestros
+        # A. Borrar datos vivos (Orden estricto para evitar ProtectedError)
         StockMovement.objects.all().delete()
         ProductImage.objects.all().delete()
-        Product.objects.all().delete()
+        
+        # Importante: Borrado físico aunque tengamos soft-delete en las vistas
+        Product.objects.all().delete() 
+        
         Brand.objects.all().delete()
         Category.objects.all().delete()
         Provider.objects.all().delete()
         
-        # --- BLOQUE CRÍTICO: BORRADO DE HISTORIAL (AUDITORÍA) ---
-        # Estas líneas son las que faltaban en tu archivo anterior
-        self.stdout.write('🧹 Purgando historial de cambios (Auditoría)...')
-        try:
-            Product.history.all().delete()
-            Brand.history.all().delete()
-            Category.history.all().delete()
-            Provider.history.all().delete()
-            ProductImage.history.all().delete()
-            self.stdout.write('✅ Historial eliminado (Contador a cero).')
-        except Exception as e:
-             self.stdout.write(self.style.WARNING(f'Nota: {e}'))
-        # -------------------------------------------------------
-
-        # Limpiamos perfiles antiguos
+        # B. LIMPIEZA NUCLEAR DE HISTORIAL (Aquí está la clave de tu error)
+        self.stdout.write('🧹 Purgando historial forense...')
+        from api.models import HistoricalProduct, HistoricalBrand, HistoricalCategory, HistoricalProvider, HistoricalProductImage
+        
+        HistoricalStockMovement.objects.all().delete() if hasattr(StockMovement, 'history') else None
+        HistoricalProductImage.objects.all().delete()
+        HistoricalProduct.objects.all().delete()
+        HistoricalBrand.objects.all().delete()
+        HistoricalCategory.objects.all().delete()
+        HistoricalProvider.objects.all().delete()
+        
+        # Limpiar perfiles
         UserProfile.objects.all().delete()
         Company.objects.all().delete()
+        
+        self.stdout.write('✅ Base de datos tabula rasa (completamente vacía).')
 
         # 3. CREACIÓN / RECICLAJE DE ACTORES
         self.stdout.write('🏭 Creando Empresa y Usuarios...')
@@ -65,14 +67,18 @@ class Command(BaseCommand):
             admin.set_password('admin123')
             admin.first_name = "Juan"
             admin.last_name = "Soto"
+            # Aseguramos privilegios de Superusuario aunque ya exista
+            admin.is_staff = True
+            admin.is_superuser = True
             admin.save()
-            self.stdout.write('♻️  Usuario admin existente reciclado.')
+            self.stdout.write('♻️  Usuario admin existente reciclado (Elevado a Superuser).')
         else:
-            admin = User.objects.create_user('admin', 'admin@demo.cl', 'admin123')
+            # USAMOS create_superuser EN LUGAR DE create_user
+            admin = User.objects.create_superuser('admin', 'admin@demo.cl', 'admin123')
             admin.first_name = "Juan"
             admin.last_name = "Soto"
             admin.save()
-            self.stdout.write('👤 Usuario admin creado.')
+            self.stdout.write('👤 Superusuario admin creado.')
 
         # Usamos update_or_create para evitar errores si el perfil ya existe
         UserProfile.objects.update_or_create(

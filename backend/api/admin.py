@@ -9,11 +9,11 @@ class ProductImageInline(admin.TabularInline):
 @admin.register(Product)
 class ProductAdmin(SimpleHistoryAdmin):
     # Qué columnas ver en la lista
-    list_display = ('nombre_comercial', 'sku', 'brand', 'category', 'stock', 'precio_venta', 'user')
+    list_display = ('nombre_comercial', 'sku', 'brand', 'category', 'stock', 'is_active', 'precio_venta', 'user')
     # Por qué campos buscar
     search_fields = ('nombre_comercial', 'sku', 'ean')
     # Filtros laterales
-    list_filter = ('brand', 'category', 'provider')
+    list_filter = ('is_active', 'brand', 'category', 'provider')
     # Editar imágenes dentro del mismo producto
     inlines = [ProductImageInline]
 

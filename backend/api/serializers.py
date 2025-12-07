@@ -96,6 +96,9 @@ class ProductSellerSerializer(serializers.ModelSerializer):
 class HistoricalProductSerializer(serializers.ModelSerializer):
     history_user = serializers.StringRelatedField()
     history_type = serializers.CharField()
+    brand_name = serializers.ReadOnlyField(source='brand.name')
+    category_name = serializers.ReadOnlyField(source='category.name')
+    provider_name = serializers.ReadOnlyField(source='provider.name')
 
     class Meta:
         model = Product.history.model # Accede al modelo de historial

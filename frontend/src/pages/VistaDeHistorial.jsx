@@ -50,33 +50,65 @@ function VistaDeHistorial() {
   };
 
   const getChanges = (current, index, all) => {
-    const prev = all[index + 1];
-    if (!prev || current.product_id !== prev.product_id) return <Badge bg="secondary" className="opacity-50">Estado Inicial</Badge>;
+      // 1. BÚSQUEDA INTELIGENTE DEL ANCESTRO
+      // Buscamos hacia atrás en la lista el primer registro que tenga el MISMO ID de producto.
+      // Esto evita comparar "Peras con Manzanas" (o Lavadoras con Refrigeradores).
+      const prev = all.slice(index + 1).find(h => h.id === current.id);
 
-    const fields = [
-        { k: 'nombre_comercial', l: 'Nombre' },
-        { k: 'precio_venta', l: 'Precio', money: true },
-        { k: 'stock', l: 'Stock' },
-        { k: 'sku', l: 'SKU' }
-    ];
+      // 2. LÓGICA DE ESTADO (Descontinuado / Reactivado)
+      // Si no hay registro previo con este ID, asumimos que nació activo.
+      const currentActive = current.is_active;
+      const prevActive = prev ? prev.is_active : true;
 
-    const changes = fields.map(f => {
-        if (current[f.k] != prev[f.k]) {
-            const valNow = f.money ? `$${parseInt(current[f.k]).toLocaleString('es-CL')}` : current[f.k];
-            const valPrev = f.money ? `$${parseInt(prev[f.k]).toLocaleString('es-CL')}` : prev[f.k];
-            return (
-                <div key={f.k} className="mb-1 p-2 rounded bg-opacity-10 bg-warning text-body border border-warning small">
-                    <strong>{f.l}:</strong> <span className="text-decoration-line-through text-muted opacity-75">{valPrev}</span> 
-                    <i className="bi bi-arrow-right-short mx-1 text-warning"></i> 
-                    <span className="fw-bold">{valNow}</span>
-                </div>
-            );
-        }
-        return null;
-    }).filter(Boolean);
+      // CASO A: Se descontinuó
+      if (currentActive === false && prevActive === true) {
+          return <Badge bg="danger" className="w-100 p-2">⛔ DESCONTINUADO (Eliminación Lógica)</Badge>;
+      }
+      
+      // CASO B: Se reactivó
+      if (currentActive === true && prevActive === false) {
+          return <Badge bg="success" className="w-100 p-2">♻️ REACTIVADO</Badge>;
+      }
 
-    return changes.length ? changes : <span className="text-muted small fst-italic">Actualización menor</span>;
-  };
+      // CASO C: Creación Inicial (No existe un ancestro para este ID)
+      if (!prev) {
+          return <Badge bg="success" className="bg-opacity-75"><i className="bi bi-stars"></i> Creación Inicial</Badge>;
+      }
+
+      // 3. DETECCIÓN DE CAMBIOS DE DATOS
+      const changes = [];
+      const fields = [
+          { k: 'nombre_comercial', l: 'Nombre' },
+          { k: 'precio_venta', l: 'Precio', money: true },
+          { k: 'stock', l: 'Stock' },
+          { k: 'sku', l: 'SKU' },
+          { k: 'brand_name', l: 'Marca' }, 
+          { k: 'category_name', l: 'Categoría' },
+          { k: 'provider_name', l: 'Proveedor' },
+          { k: 'descripcion', l: 'Descripción' }
+      ];
+
+      fields.forEach(f => {
+          const valNow = current[f.k];
+          const valPrev = prev[f.k];
+
+          // Comparación estricta de texto (trim) para evitar falsos positivos por espacios o tipos
+          if (String(valNow || '').trim() !== String(valPrev || '').trim()) {
+              const displayNow = f.money ? `$${parseInt(valNow||0).toLocaleString('es-CL')}` : (valNow || '---');
+              const displayPrev = f.money ? `$${parseInt(valPrev||0).toLocaleString('es-CL')}` : (valPrev || '---');
+              
+              changes.push(
+                  <div key={f.k} className="mb-1 p-2 rounded bg-warning bg-opacity-10 text-body border border-warning small">
+                      <strong>{f.l}:</strong> <span className="text-decoration-line-through text-muted opacity-75 mx-1">{displayPrev}</span> 
+                      <i className="bi bi-arrow-right-short text-warning"></i> 
+                      <span className="fw-bold mx-1">{displayNow}</span>
+                  </div>
+              );
+          }
+      });
+
+      return changes.length > 0 ? changes : <span className="text-muted small fst-italic">Edición menor (sin cambios clave)</span>;
+    };
 
   return (
     <div className="min-vh-100 bg-body-tertiary transition-colors">

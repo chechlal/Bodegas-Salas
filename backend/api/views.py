@@ -100,18 +100,61 @@ class ProductViewSet(viewsets.ModelViewSet):
             f"Bodegas Salas ERP - {datetime.now().strftime('%d/%m/%Y')}"
         )
         return Response({'text': ficha})
+    
+    def get_queryset(self):
+        return Product.objects.filter(is_active=True).select_related("brand", "category", "provider").prefetch_related("images")
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save()
 
 class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
     serializer_class = BrandSerializer
 
+    def perform_destroy(self, instance):
+        # LÓGICA DE CASCADA SEGURA:
+        # A. Apagar la Marca
+        instance.is_active = False
+        instance.save()
+        
+        # B. Apagar automáticamente todos sus productos (Bulk Update)
+        # Esto es mucho más rápido que borrarlos uno por uno
+        products_count = instance.product_set.update(is_active=False)
+        
+        print(f"📉 Marca '{instance.name}' descontinuada. {products_count} productos ocultados.")
+
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
+    def perform_destroy(self, instance):
+        # LÓGICA DE CASCADA SEGURA:
+        # A. Apagar la Marca
+        instance.is_active = False
+        instance.save()
+        
+        # B. Apagar automáticamente todos sus productos (Bulk Update)
+        # Esto es mucho más rápido que borrarlos uno por uno
+        products_count = instance.product_set.update(is_active=False)
+        
+        print(f"📉 Categoría '{instance.name}' descontinuada. {products_count} productos ocultados.")
+
 class ProviderViewSet(viewsets.ModelViewSet):
     queryset = Provider.objects.all()
     serializer_class = ProviderSerializer
+
+    def perform_destroy(self, instance):
+        # LÓGICA DE CASCADA SEGURA:
+        # A. Apagar la Marca
+        instance.is_active = False
+        instance.save()
+        
+        # B. Apagar automáticamente todos sus productos (Bulk Update)
+        # Esto es mucho más rápido que borrarlos uno por uno
+        products_count = instance.product_set.update(is_active=False)
+        
+        print(f"📉 Proveedor '{instance.name}' descontinuado. {products_count} productos ocultados.")
 
 class ProductImageViewSet(viewsets.ModelViewSet):
     queryset = ProductImage.objects.all()
