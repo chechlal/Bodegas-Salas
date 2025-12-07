@@ -3,6 +3,9 @@ from simple_history.models import HistoricalRecords # type: ignore
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
+from django.db.models.signals import post_delete, pre_save
+from django.dispatch import receiver
+import os
 
 class Brand(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name=_("Nombre de la Marca"))
@@ -128,3 +131,38 @@ class StockMovement(models.Model):
         verbose_name = _("Movimiento de Stock")
         verbose_name_plural = _("Movimientos de Stock")
         ordering = ['-created_at']
+
+@receiver(post_delete, sender=ProductImage)
+def auto_delete_file_on_delete(sender, instance, **kwargs):
+    """
+    Borra el archivo físico cuando se elimina el objeto ProductImage.
+    """
+    if instance.image:
+        if os.path.isfile(instance.image.path):
+            try:
+                os.remove(instance.image.path)
+                print(f"🗑️ Archivo eliminado: {instance.image.path}")
+            except Exception as e:
+                print(f"⚠️ Error borrando archivo: {e}")
+
+@receiver(pre_save, sender=ProductImage)
+def auto_delete_file_on_change(sender, instance, **kwargs):
+    """
+    Borra el archivo antiguo cuando se actualiza la imagen por una nueva.
+    """
+    if not instance.pk:
+        return False
+
+    try:
+        old_file = ProductImage.objects.get(pk=instance.pk).image
+    except ProductImage.DoesNotExist:
+        return False
+
+    new_file = instance.image
+    if not old_file == new_file:
+        if os.path.isfile(old_file.path):
+            try:
+                os.remove(old_file.path)
+                print(f"🔄 Archivo antiguo reemplazado: {old_file.path}")
+            except Exception as e:
+                print(f"⚠️ Error reemplazando archivo: {e}")

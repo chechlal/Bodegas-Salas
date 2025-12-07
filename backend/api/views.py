@@ -37,6 +37,25 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Asigna el usuario autenticado como dueño del producto
         serializer.save(user=self.request.user)
 
+    def perform_update(self, serializer):
+        # 1. Obtenemos el producto antes del cambio
+        instance = self.get_object()
+        
+        # 2. Detectamos si hubo cambios reales
+        has_changes = False
+        for field, value in serializer.validated_data.items():
+            old_value = getattr(instance, field)
+            if old_value != value:
+                has_changes = True
+                break
+        
+        # 3. Solo guardamos si hay cambios
+        if has_changes:
+            serializer.save(user=self.request.user)
+        else:
+            # Si no hay cambios, no hacemos nada (el historial no se ensucia)
+            pass
+
     def get_serializer_class(self):
         # Si el usuario es Staff/Admin, ve todo completo
         if self.request.user.is_staff or (hasattr(self.request.user, 'profile') and self.request.user.profile.role == 'ADMIN'):
@@ -56,30 +75,30 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ['nombre_comercial', 'precio_venta', 'stock', 'rating', 'marca', 'categoria']
     pagination_class = StandardResultSetPagination
 
-@action(detail=True, methods=['get'], url_path='pim-sheet')
-def pim_sheet(self, request, pk=None):
+    @action(detail=True, methods=['get'], url_path='pim-sheet')
+    def pim_sheet(self, request, pk=None):
         product = self.get_object()
+
         ficha = (
-            f"FICHA TÉCNICA DE PRODUCTO\n"
+            f"FICHA TECNICA DE PRODUCTO\n"
             f"========================================\n"
-            f"Producto: {product.nombre_comercial}\n"
-            f"Marca:    {product.brand.name}\n"
+            f"PRODUCTO: {product.nombre_comercial}\n"
             f"SKU:      {product.sku}\n"
+            f"MARCA:    {product.brand.name if product.brand else 'N/A'}\n"
             f"----------------------------------------\n"
-            f"ESPECIFICACIONES:\n"
-            f"- Categoría:   {product.category.name}\n"
-            f"- Dimensiones: {product.dimensiones}\n"
-            f"- Peso:        {product.peso} kg\n"
-            f"- Uso Sugerido: {product.edad_uso or 'N/A'}\n"
+            f"DETALLES TÉCNICOS:\n"
+            f"- Categoría:   {product.category.name if product.category else 'N/A'}\n"
+            f"- Dimensiones: {product.dimensiones or 'N/A'}\n"
+            f"- Peso:        {product.peso or 'N/A'} kg\n"
+            f"- Uso:         {product.edad_uso or 'N/A'}\n"
             f"----------------------------------------\n"
             f"PRECIO LISTA: ${product.precio_venta:,.0f} CLP\n"
             f"----------------------------------------\n"
             f"DESCRIPCIÓN:\n"
-            f"{product.descripcion}\n"
+            f"{product.descripcion or 'N/A'}\n"
             f"========================================\n"
-            f"Generado por Bodegas Salas ERP - {datetime.now().strftime('%d/%m/%Y')}"
+            f"Bodegas Salas ERP - {datetime.now().strftime('%d/%m/%Y')}"
         )
-
         return Response({'text': ficha})
 
 class BrandViewSet(viewsets.ModelViewSet):

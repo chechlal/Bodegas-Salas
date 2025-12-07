@@ -34,36 +34,35 @@ function App() {
   };
 
   return (
-    <Router>
-      <AuthProvider> {/* 6. Envuelve toda la App en el AuthProvider */}
-        
-        {/* 7. El Menú ya no necesita props de usuario, los obtiene del contexto */}
-        <Menu theme={theme} toggleTheme={toggleTheme} />
-        
-        <div className="container-fluid p-0">
-          <Routes>
-            {/* --- RUTAS PÚBLICAS --- */}
-            <Route path="/" element={<Home />} />
-            <Route path="/catalogo" element={<VistaPrincipalCatalogo />} />
-            <Route path="/contacto" element={<Contacto />} />
-            <Route path="/login" element={<Login />} />
+      <Router>
+        <AuthProvider>
+          <Menu theme={theme} toggleTheme={toggleTheme} />
+          
+          <div className="container-fluid p-0">
+            <Routes>
+              {/* --- RUTAS PÚBLICAS (Solo lo que ve un extraño) --- */}
+              <Route path="/" element={<Home />} />
+              <Route path="/contacto" element={<Contacto />} />
+              <Route path="/login" element={<Login />} />
 
-            {/* Rutas Solo Admin */}
-            <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
-              <Route path="/admin-productos" element={<AdminProducts theme={theme} />} />
-              <Route path="/admin-historial" element={<VistaDeHistorial />} />
-            </Route>
+              {/* --- RUTAS PRIVADAS (Requieren Login) --- */}
+              
+              {/* Rutas Solo Admin */}
+              <Route element={<ProtectedRoute requiredRole="ADMIN" />}>
+                <Route path="/admin-productos" element={<AdminProducts theme={theme} />} />
+                <Route path="/admin-historial" element={<VistaDeHistorial />} />
+              </Route>
 
-            {/* Rutas para Vendedor y Admin (Catálogo) */}
-            <Route element={<ProtectedRoute />}>
-              <Route path="/catalogo" element={<VistaPrincipalCatalogo />} />
-            </Route>
+              {/* Rutas para Vendedor y Admin (Catálogo Protegido) */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/catalogo" element={<VistaPrincipalCatalogo />} />
+              </Route>
 
-          </Routes>
-        </div>
-      </AuthProvider>
-    </Router>
-  );
-}
+            </Routes>
+          </div>
+        </AuthProvider>
+      </Router>
+    );
+  }
 
 export default App;

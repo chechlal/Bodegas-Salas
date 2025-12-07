@@ -4,6 +4,7 @@ from simple_history.models import HistoricalRecords
 from .models import StockMovement
 
 class StockMovementSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = StockMovement
         fields = ['id', 'product', 'quantity', 'movement_type', 'reason', 'user', 'created_at']

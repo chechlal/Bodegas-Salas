@@ -1,124 +1,111 @@
 from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User
 from companies.models import Company, UserProfile
-from api.models import Product, Brand, Category, Provider
+from api.models import Product, Brand, Category, Provider, ProductImage, StockMovement
 import random
-import string
-
-User = get_user_model()
+from django.core.files.base import ContentFile
+import requests
 
 class Command(BaseCommand):
-    help = 'Genera DATOS MASIVOS para la presentación de título'
+    help = 'Genera datos de prueba completos con imágenes simuladas para la demo'
 
     def handle(self, *args, **kwargs):
-        # ==========================================
-        # 1. LIMPIEZA TOTAL (WIPE)
-        # ==========================================
-        self.stdout.write(self.style.WARNING("🧹 Limpiando base de datos completa..."))
-        # Borramos en orden inverso para evitar conflictos
+        self.stdout.write(self.style.WARNING('🧹 Limpiando base de datos completa...'))
+        
+        # 1. Borrar datos antiguos en orden para respetar claves foráneas
+        StockMovement.objects.all().delete()
+        ProductImage.objects.all().delete()
         Product.objects.all().delete()
         Brand.objects.all().delete()
         Category.objects.all().delete()
         Provider.objects.all().delete()
         UserProfile.objects.all().delete()
-        User.objects.all().delete()
+        User.objects.exclude(is_superuser=True).delete() # Mantener superusuario si existe
         Company.objects.all().delete()
 
-        # ==========================================
-        # 2. CREACIÓN DE EMPRESA Y USUARIOS
-        # ==========================================
-        self.stdout.write("🏭 Creando Empresa y Actores...")
-        company = Company.objects.create(name="Bodegas Salas Demo", rut="76.123.456-K")
+        # 2. Crear Empresa y Usuarios
+        self.stdout.write('🏭 Creando Empresa y Actores...')
+        company = Company.objects.create(name="Bodegas Salas Ltda", rut="76.123.456-K")
 
         # Admin
-        admin_user = User.objects.create_superuser('admin', 'admin@bodegas.cl', 'admin123')
-        profile_admin = UserProfile.objects.get(user=admin_user)
-        profile_admin.company = company
-        profile_admin.role = 'ADMIN'
-        profile_admin.save()
+        admin_user = User.objects.create_user('admin', 'admin@bodegassalas.cl', 'admin123')
+        admin_user.first_name = "Juan"
+        admin_user.last_name = "Soto"
+        admin_user.save()
+        UserProfile.objects.filter(user=admin_user).update(company=company, role='ADMIN', phone='+56911111111')
 
         # Vendedor
-        seller_user = User.objects.create_user('vendedor', 'ven@bodegas.cl', 'seller123')
-        profile_seller = UserProfile.objects.get(user=seller_user)
-        profile_seller.company = company
-        profile_seller.role = 'SELLER'
-        profile_seller.save()
+        seller_user = User.objects.create_user('vendedor', 'vendedor@bodegassalas.cl', 'seller123')
+        seller_user.first_name = "María"
+        seller_user.last_name = "Pérez"
+        seller_user.save()
+        UserProfile.objects.filter(user=seller_user).update(company=company, role='SELLER', phone='+56922222222')
 
-        # ==========================================
-        # 3. CREACIÓN DE DATOS MAESTROS
-        # ==========================================
-        self.stdout.write("📦 Creando Marcas, Categorías y Proveedores...")
+        # 3. Crear Maestros
+        self.stdout.write('📦 Creando Marcas, Categorías y Proveedores...')
+        
+        brands_list = ['Samsung', 'LG', 'Sony', 'Bosch', 'Makita', 'Stanley', 'Lenovo', 'HP', 'Generico']
+        brands_db = [Brand.objects.create(name=b) for b in brands_list]
 
-        # Listas de datos base
-        nombres_marcas = ["Samsung", "LG", "Sony", "Bosch", "Makita", "Stanley", "Philips", "Logitech", "Nintendo", "Apple", "Generico"]
-        nombres_categorias = ["Electrónica", "Herramientas", "Hogar", "Audio", "Iluminación", "Juguetería", "Computación"]
-        nombres_proveedores = ["TecnoChile", "Importadora Global", "Distribuidora Santiago", "AliExpress Suppliers", "Bodega Central"]
+        cats_list = [
+            ('Electrónica', '300x300/000/fff?text=Electro'), 
+            ('Herramientas', '300x300/550/fff?text=Tool'), 
+            ('Hogar', '300x300/282/fff?text=Home'), 
+            ('Computación', '300x300/007/fff?text=PC')
+        ]
+        cats_db = []
+        for c_name, c_img in cats_list:
+            cats_db.append(Category.objects.create(name=c_name))
 
-        # Crear objetos en BD
-        marcas_objs = [Brand.objects.create(name=m) for m in nombres_marcas]
-        cats_objs = [Category.objects.create(name=c) for c in nombres_categorias]
-        provs_objs = [Provider.objects.create(name=p) for p in nombres_proveedores]
+        provs_list = ['TecnoGlobal', 'Intcomex', 'Sodimac Pro', 'Importadora Asia']
+        provs_db = [Provider.objects.create(name=p) for p in provs_list]
 
-        # ==========================================
-        # 4. GENERADOR MASIVO DE PRODUCTOS
-        # ==========================================
-        CANTIDAD_A_GENERAR = 50 
-        self.stdout.write(f"🚀 Generando {CANTIDAD_A_GENERAR} productos aleatorios...")
+        # 4. Crear Productos
+        self.stdout.write('🚀 Generando 50 productos con imágenes...')
+        
+        adjetivos = ['Pro', 'Ultra', 'Plus', 'Básico', 'Industrial', 'Home']
+        sustantivos = ['Taladro', 'Monitor', 'Notebook', 'Refrigerador', 'Lavadora', 'Sierra', 'Martillo', 'Televisor', 'Mouse', 'Teclado']
 
-        adjetivos = ["Pro", "Ultra", "Max", "Lite", "Basic", "Premium", "v2.0", "Wireless", "Industrial", "Hogar"]
-        sustantivos = {
-            "Electrónica": ["Televisor", "Monitor", "Cargador", "Cable HDMI"],
-            "Herramientas": ["Taladro", "Martillo", "Sierra", "Destornillador"],
-            "Hogar": ["Lámpara", "Cortina", "Mesa", "Silla Gamer"],
-            "Audio": ["Parlante", "Audífonos", "Barra de Sonido", "Micrófono"],
-            "Iluminación": ["Foco LED", "Tira LED", "Ampolleta Smart"],
-            "Juguetería": ["Figura Acción", "Puzzle", "Auto Control Remoto"],
-            "Computación": ["Mouse", "Teclado Mecánico", "Webcam", "Disco SSD"]
-        }
+        for i in range(50):
+            nombre = f"{random.choice(sustantivos)} {random.choice(brands_list)} {random.choice(adjetivos)}"
+            cat_idx = random.randint(0, len(cats_db)-1)
+            category = cats_db[cat_idx]
+            
+            # Generar URL de imagen dummy según categoría para dar color
+            img_url = f"https://dummyimage.com/{cats_list[cat_idx][1]}"
 
-        for i in range(CANTIDAD_A_GENERAR):
-            # Seleccionar datos al azar
-            cat_obj = random.choice(cats_objs)
-            brand_obj = random.choice(marcas_objs)
-            prov_obj = random.choice(provs_objs)
-
-            # Generar nombre
-            base_name = random.choice(sustantivos.get(cat_obj.name, ["Producto Genérico"]))
-            adj = random.choice(adjetivos)
-            nombre_final = f"{base_name} {brand_obj.name} {adj}"
-
-            # Precios
-            costo = random.randint(5, 500) * 1000
-            margen = random.uniform(1.2, 1.6)
-            precio = int(costo * margen)
-            precio = round(precio / 10) * 10
-
-            # Identificadores
-            sku_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-            sku = f"{cat_obj.name[:3].upper()}-{brand_obj.name[:3].upper()}-{sku_suffix}-{i}"
-            ean = ''.join(random.choices(string.digits, k=13))
-
-            # Crear producto (¡AHORA CON DUEÑO!)
-            Product.objects.create(
-                user=admin_user,  # <--- AQUÍ ESTÁ EL FIX
-                nombre_comercial=nombre_final,
-                brand=brand_obj,
-                category=cat_obj,
-                provider=prov_obj,
-                ean=ean,
-                sku=sku,
-                peso=round(random.uniform(0.1, 25.0), 2),
-                dimensiones=f"{random.randint(10,100)}x{random.randint(10,100)}x{random.randint(5,50)}",
-                descripcion=f"Descripción generada automáticamente para {nombre_final}. Ideal para uso {adj.lower()}.",
-                costo_cg=costo,
-                precio_venta=precio,
-                stock=random.randint(0, 150),
+            prod = Product.objects.create(
+                user=admin_user,
+                nombre_comercial=nombre,
+                brand=random.choice(brands_db),
+                ean=f"780{random.randint(100000000, 999999999)}",
+                sku=f"SKU-{1000+i}",
+                category=category,
+                peso=random.randint(1, 50),
+                dimensiones=f"{random.randint(10,100)}x{random.randint(10,100)}x{random.randint(10,100)}",
+                descripcion=f"Producto de alta calidad {nombre}. Ideal para uso intensivo. Garantía 1 año.",
+                costo_cg=random.randint(5000, 500000),
                 lugar_bodega=f"Pasillo {random.choice(['A','B','C'])}-{random.randint(1,20)}",
-                rating=round(random.uniform(1.0, 5.0), 1),
-                edad_uso=f"{random.randint(3,18)}+ años"
+                provider=random.choice(provs_db),
+                stock=random.randint(0, 100),
+                precio_venta=random.randint(10000, 900000),
+                rating=round(random.uniform(3.0, 5.0), 1)
             )
 
-        self.stdout.write(self.style.SUCCESS(f"✅ ¡ÉXITO! Se crearon {CANTIDAD_A_GENERAR} productos listos para la demo."))
-        self.stdout.write("--------------------------------------------------")
-        self.stdout.write("🔑 Admin:    admin / admin123")
-        self.stdout.write("🔑 Vendedor: vendedor / seller123")
+            # Descargar y guardar imagen
+            try:
+                img_resp = requests.get(img_url)
+                if img_resp.status_code == 200:
+                    img_name = f"prod_{i}.jpg"
+                    ProductImage.objects.create(
+                        product=prod,
+                        image=ContentFile(img_resp.content, name=img_name),
+                        is_principal=True
+                    )
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f'Error imagen prod {i}: {e}'))
+
+        self.stdout.write(self.style.SUCCESS(f'✅ ¡ÉXITO! Se crearon 50 productos listos y coloridos.'))
+        self.stdout.write(f'--------------------------------------------------')
+        self.stdout.write(f'🔑 Admin:    admin / admin123')
+        self.stdout.write(f'🔑 Vendedor: vendedor / seller123')

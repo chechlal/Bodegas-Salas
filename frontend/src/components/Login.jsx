@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Container, Form, Button, Card, Alert, Spinner } from 'react-bootstrap';
+import { Container, Form, Button, Card, Alert, Spinner, InputGroup } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -15,103 +15,96 @@ function Login() {
       e.preventDefault();
       setError('');
       setLoading(true);
-
       try {
         const success = await login(username, password);
-        
         if (success) {
-          // --- LÓGICA DE REDIRECCIÓN INTELIGENTE ---
-          // 1. Leemos el token recién guardado para saber quién es
           const token = localStorage.getItem('token');
-          if (token) {
-              // Decodificamos el payload del JWT (la parte intermedia)
-              const payload = JSON.parse(atob(token.split('.')[1]));
-              
-              // 2. Si es ADMIN -> Admin Productos, Si es SELLER -> Catálogo
-              if (payload.role === 'ADMIN') {
-                  navigate('/admin-productos');
-              } else {
-                  navigate('/catalogo');
-              }
-          } else {
-              // Fallback por seguridad
-              navigate('/catalogo');
-          }
+          const payload = token ? JSON.parse(atob(token.split('.')[1])) : {};
+          payload.role === 'ADMIN' ? navigate('/admin-productos') : navigate('/catalogo');
         } else {
-          setError('Usuario o contraseña incorrectos (o error de servidor).');
+          setError('Credenciales incorrectas.');
         }
       } catch (err) {
-        console.error('Error detallado de login:', err);
-        setError('Error de conexión. Revisa la consola (F12) para más detalles.');
+        setError('Error de conexión con el servidor.');
       } finally {
         setLoading(false);
       }
     };
 
   return (
-    <Container className="d-flex justify-content-center align-items-center" style={{ minHeight: '80vh' }}>
-      <Card className="shadow-lg border-0" style={{ width: '100%', maxWidth: '450px' }}>
-        <Card.Body className="p-4 p-md-5">
-          <div className="text-center mb-4">
-            <i className="bi bi-box-arrow-in-right fs-1 text-success"></i>
-            <h2 className="fw-bold mb-0 mt-2">Iniciar Sesión</h2>
-            <p className="text-muted">Acceso solo para administradores</p>
-          </div>
-          
-          <Form onSubmit={handleSubmit}>
-            <Form.Group className="mb-3" controlId="formUsername">
-              <Form.Label>Nombre de Usuario</Form.Label>
-              <Form.Control
-                type="text"
-                placeholder="Ej: admin"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                autoComplete="username"
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-4" controlId="formPassword">
-              <Form.Label>Contraseña</Form.Label>
-              <Form.Control
-                type="password"
-                placeholder="Tu contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </Form.Group>
-
-            {/* Alerta de error que solo aparece si 'error' tiene contenido */}
-            {error && (
-              <Alert variant="danger" className="text-center">
-                {error}
-              </Alert>
-            )}
-
-            <div className="d-grid">
-              <Button variant="success" type="submit" size="lg" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Spinner
-                      as="span"
-                      animation="border"
-                      size="sm"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                    <span className="ms-2">Ingresando...</span>
-                  </>
-                ) : (
-                  'Ingresar'
-                )}
-              </Button>
+    <div className="bg-body-tertiary min-vh-100 d-flex flex-column justify-content-center">
+      <Container>
+        <div className="row justify-content-center">
+          <div className="col-md-6 col-lg-4">
+            
+            <div className="text-center mb-4">
+              <div className="bg-primary bg-gradient text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow" style={{width: 64, height: 64}}>
+                <i className="bi bi-box-seam fs-2"></i>
+              </div>
+              <h2 className="fw-bold mt-3 text-body">Bienvenido</h2>
+              <p className="text-muted">Ingresa a tu cuenta para gestionar</p>
             </div>
-          </Form>
-        </Card.Body>
-      </Card>
-    </Container>
+
+            <Card className="shadow-lg border-0 bg-body rounded-4">
+              <Card.Body className="p-4 p-md-5">
+                <Form onSubmit={handleSubmit}>
+                  <Form.Group className="mb-3">
+                    <Form.Label className="text-muted small fw-bold text-uppercase">Usuario</Form.Label>
+                    <InputGroup>
+                      <InputGroup.Text className="bg-body-secondary border-end-0"><i className="bi bi-person text-muted"></i></InputGroup.Text>
+                      <Form.Control
+                        className="bg-body-secondary border-start-0 ps-0"
+                        placeholder="Ej: admin"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        required
+                        autoFocus
+                      />
+                    </InputGroup>
+                  </Form.Group>
+
+                  <Form.Group className="mb-4">
+                    <Form.Label className="text-muted small fw-bold text-uppercase">Contraseña</Form.Label>
+                    <InputGroup>
+                      <InputGroup.Text className="bg-body-secondary border-end-0"><i className="bi bi-lock text-muted"></i></InputGroup.Text>
+                      <Form.Control
+                        type="password"
+                        className="bg-body-secondary border-start-0 ps-0"
+                        placeholder="••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                    </InputGroup>
+                  </Form.Group>
+
+                  {error && (
+                    <Alert variant="danger" className="d-flex align-items-center small py-2">
+                      <i className="bi bi-exclamation-triangle-fill me-2"></i> {error}
+                    </Alert>
+                  )}
+
+                  <Button variant="primary" type="submit" size="lg" className="w-100 fw-bold rounded-pill mb-3" disabled={loading}>
+                    {loading ? <Spinner as="span" animation="border" size="sm" /> : 'Ingresar al Sistema'}
+                  </Button>
+
+                  <div className="text-center">
+                    <Link to="/" className="text-decoration-none text-muted small">
+                      <i className="bi bi-arrow-left me-1"></i> Volver al Inicio
+                    </Link>
+                  </div>
+                </Form>
+              </Card.Body>
+            </Card>
+
+            <div className="text-center mt-4 text-muted small">
+              &copy; 2025 Bodegas Salas. Todos los derechos reservados.
+            </div>
+
+          </div>
+        </div>
+      </Container>
+    </div>
   );
 }
 

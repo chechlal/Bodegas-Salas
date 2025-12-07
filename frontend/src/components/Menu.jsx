@@ -1,88 +1,99 @@
-import React from "react";
-import { Navbar, Nav, Container, Button } from "react-bootstrap";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext"; // Importamos el contexto
+import React from 'react';
+import { Navbar, Nav, Container, Button, Badge } from 'react-bootstrap';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
-function Menu({ theme = 'light', toggleTheme }) {
-  const isDark = theme === 'dark';
-  const { isAdmin, user, logout } = useAuth(); // Obtenemos el estado de autenticación
+function Menu({ theme, toggleTheme }) {
+  const { user, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
-    navigate('/login'); // Redirigimos al login después de cerrar sesión
+    navigate('/'); // Al salir, volvemos a la portada
   };
+
+  const isActive = (path) => location.pathname === path ? 'active fw-bold' : '';
 
   return (
     <Navbar 
-      bg={isDark ? "dark" : "light"} 
-      variant={isDark ? "dark" : "light"}
       expand="lg" 
-      sticky="top" 
-      className="shadow-lg"
+      className="shadow-sm border-bottom sticky-top" 
+      bg="body" 
+      data-bs-theme={theme}
     >
       <Container>
-        <Navbar.Brand as={Link} to="/" className="fw-bold fs-4">
-          <i className={`bi bi-database ${isDark ? 'text-light' : 'text-dark'}`}></i>
-          <span className={isDark ? 'text-light' : 'text-dark'}> Gestión Inventario</span>
+        {/* LOGO */}
+        <Navbar.Brand as={Link} to={user ? "/catalogo" : "/"} className="d-flex align-items-center gap-2">
+          <i className="bi bi-box-seam-fill text-primary fs-4"></i>
+          <span className="fw-bold tracking-tight">Bodegas Salas</span>
         </Navbar.Brand>
         
-        <Navbar.Toggle aria-controls="basic-navbar-nav" />
+        <Navbar.Toggle aria-controls="main-navbar" />
         
-        <Navbar.Collapse id="basic-navbar-nav">
-          {/* --- ENLACES PRINCIPALES (VISIBLES PARA TODOS) --- */}
-          <Nav className="me-auto fs-5">
-            <Nav.Link as={Link} to="/catalogo" className={`fw-medium px-3 ${isDark ? 'text-light' : 'text-dark'}`}>
-              <i className="bi bi-table me-2"></i>
-              Catálogo
-            </Nav.Link>
-            <Nav.Link as={Link} to="/contacto" className={`fw-medium px-3 ${isDark ? 'text-light' : 'text-dark'}`}>
-              <i className="bi bi-envelope-at me-2"></i>
-              Contacto
-            </Nav.Link>
-
-            {/* --- ENLACES DE ADMIN (SOLO VISIBLES SI isAdmin es true) --- */}
-            {isAdmin && (
+        <Navbar.Collapse id="main-navbar">
+          <Nav className="me-auto ms-lg-4">
+            
+            {/* MENÚ PARA VISITANTES (NO LOGUEADOS) */}
+            {!user && (
               <>
-                <Nav.Link as={Link} to="/admin-productos" className={`fw-medium px-3 ${isDark ? 'text-light' : 'text-dark'}`}>
-                  <i className="bi bi-gear me-2"></i>
-                  Administrar Productos
+                <Nav.Link as={Link} to="/" className={isActive('/')}>Inicio</Nav.Link>
+                <Nav.Link as={Link} to="/contacto" className={isActive('/contacto')}>Contacto</Nav.Link>
+              </>
+            )}
+
+            {/* MENÚ PARA USUARIOS (LOGUEADOS) */}
+            {user && (
+              <>
+                <Nav.Link as={Link} to="/catalogo" className={isActive('/catalogo')}>
+                  <i className="bi bi-grid-3x3 me-1"></i> Catálogo
                 </Nav.Link>
-                <Nav.Link as={Link} to="/admin-historial" className={`fw-medium px-3 ${isDark ? 'text-light' : 'text-dark'}`}>
-                  <i className="bi bi-clock-history me-2"></i>
-                  Historial
-                </Nav.Link>
+
+                {isAdmin && (
+                  <>
+                    <Nav.Link as={Link} to="/admin-productos" className={isActive('/admin-productos')}>
+                      <i className="bi bi-pencil-square me-1"></i> Gestión
+                    </Nav.Link>
+                    <Nav.Link as={Link} to="/admin-historial" className={isActive('/admin-historial')}>
+                      <i className="bi bi-shield-check me-1"></i> Auditoría
+                    </Nav.Link>
+                  </>
+                )}
               </>
             )}
           </Nav>
-          
-          {/* --- SECCIÓN DE USUARIO Y LOGIN/LOGOUT --- */}
-          <div className="d-flex align-items-center gap-3">
-            <div className="d-flex align-items-center gap-2">
-              <i className={`bi bi-person ${isDark ? 'text-light' : 'text-dark'}`}></i>
-              <span className={`${isDark ? 'text-light' : 'text-dark'} fw-medium`}>
-                {user ? `Bienvenido, ${user.username}` : "Invitado"}
-              </span>
-            </div>
 
-            {/* --- LÓGICA DE BOTONES --- */}
-            {user ? (
-              // Si es admin, mostrar botón de Cerrar Sesión
-              <Button variant="outline-danger" onClick={handleLogout}>
-                <i className="bi bi-box-arrow-right me-2"></i>
-                Cerrar Sesión
-              </Button>
-            ) : (
-              // Si es invitado, mostrar botón para Iniciar Sesión
-              <Button as={Link} to="/login" variant="outline-success">
-                <i className="bi bi-box-arrow-in-right me-2"></i>
-                Admin Login
-              </Button>
-            )}
-
-            <Button variant="link" onClick={toggleTheme} className="p-0">
-              <i className={`bi ${isDark ? 'bi-sun-fill text-light' : 'bi-moon-fill text-dark'} fs-4`}></i>
+          {/* ZONA DERECHA (ACCIONES) */}
+          <div className="d-flex align-items-center gap-3 mt-3 mt-lg-0">
+            {/* Switch Tema */}
+            <Button variant="link" onClick={toggleTheme} className="text-body p-0 fs-5 border-0">
+              <i className={`bi ${theme === 'dark' ? 'bi-moon-stars-fill' : 'bi-sun-fill'}`}></i>
             </Button>
+
+            {!user ? (
+              // Botones Visitante
+              <div className="d-flex gap-2">
+                <Button as={Link} to="/login" variant="outline-primary" size="sm" className="fw-bold px-3 rounded-pill">
+                  Ingresar
+                </Button>
+                <Button as={Link} to="/contacto" variant="primary" size="sm" className="fw-bold px-3 rounded-pill">
+                  Prueba Gratis
+                </Button>
+              </div>
+            ) : (
+              // Panel Usuario
+              <div className="d-flex align-items-center gap-3 border-start ps-3">
+                <div className="text-end lh-1 d-none d-lg-block">
+                  <div className="fw-bold small">{user.username}</div>
+                  <Badge bg={isAdmin ? 'primary' : 'secondary'} className="fw-normal" style={{fontSize:'0.65rem'}}>
+                    {isAdmin ? 'ADMIN' : 'VENDEDOR'}
+                  </Badge>
+                </div>
+                <Button variant="outline-danger" size="sm" onClick={handleLogout} title="Cerrar Sesión">
+                  <i className="bi bi-box-arrow-right"></i>
+                </Button>
+              </div>
+            )}
           </div>
         </Navbar.Collapse>
       </Container>
