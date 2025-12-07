@@ -56,6 +56,9 @@ function AdminProducts({ theme }) {
     show: false, entity: null, id: null, name: "", input: "", originalType: null 
   });
 
+  // --- 5. DESCRIPCIONES POR IA ---
+  const [generatingAI, setGeneratingAI] = useState(false);
+
   useEffect(() => {
     document.title = "Administración de Catálogo - Bodegas Salas";
     if (!hasLoaded.current) {
@@ -497,6 +500,42 @@ function AdminProducts({ theme }) {
       : <i className="bi bi-sort-up text-primary ms-1"></i>;
   };
 
+    const handleGenerateDescription = async () => {
+        if (!formData.nombre_comercial) {
+            return showFeedback("Escribe el nombre del producto primero", "warning");
+        }
+
+        setGeneratingAI(true);
+
+        try {
+            const brandName = brands.find(b => b.id == formData.brand_id)?.name || "Genérica";
+            const catName = categories.find(c => c.id == formData.category_id)?.name || "General";
+
+            const res = await authFetch('/api/products/generate-ai-description/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: formData.nombre_comercial,
+                    brand_name: brandName,
+                    category_name: catName
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok) {
+                setFormData(prev => ({ ...prev, descripcion: data.description }));
+                showFeedback("✨ Descripción creada con IA", "success");
+            } else {
+                showFeedback("Error: " + (data.error || "Falló la IA"), "danger");
+            }
+        } catch (error) {
+            showFeedback("Error de conexión", "danger");
+        } finally {
+            setGeneratingAI(false);
+        }
+    };
+
   return (
     <div className={`container-fluid p-4 ${dark ? 'bg-black' : 'bg-light'} min-vh-100`}>
       
@@ -757,8 +796,28 @@ function AdminProducts({ theme }) {
                   <Tab eventKey="details" title="📝 Detalles">
                       <Row className="g-3">
                           <Col md={12}>
-                              <Form.Label>Descripción</Form.Label>
-                              <Form.Control as="textarea" rows={3} value={formData.descripcion || ""} onChange={e=>setFormData({...formData, descripcion: e.target.value})} className={inputClass} />
+                            <div className="d-flex justify-content-between align-items-center mb-1">
+                                <Form.Label>Descripción</Form.Label>
+                                <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={handleGenerateDescription}
+                                    disabled={generatingAI}
+                                >
+                                    {generatingAI ? (
+                                        <>⏳ Creando...</>
+                                    ) : (
+                                        <><i className="bi bi-stars"></i> Generar con IA</>
+                                    )}
+                                </Button>
+                            </div>
+                            <Form.Control
+                                as="textarea"
+                                rows={3}
+                                value={formData.descripcion || ""}
+                                onChange={e=>setFormData({...formData, descripcion: e.target.value})}
+                                className={inputClass}
+                            />
                           </Col>
                           <Col md={4}>
                               <Form.Label>Ubicación Bodega</Form.Label>

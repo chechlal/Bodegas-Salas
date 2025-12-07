@@ -9,6 +9,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from companies.permissions import IsAdminOrReadOnly, IsSellerUser, IsSellerUserOrAdmin
 from datetime import datetime
+import os
+import google.generativeai as genai
 
 class StockMovementViewSet(viewsets.ModelViewSet):
     queryset = StockMovement.objects.all()
@@ -107,6 +109,35 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+    @action(detail=False, methods=['post'], url_path='generate-ai-description')
+    def generate_ai_description(self, request):
+        api_key = os.environ.get('GOOGLE_API_KEY')
+
+        if not api_key:
+            return Response({"error": "Falta configurar la API Key"}, status=503)
+        
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-2.5-flash')
+
+            data = request.data
+            name = data.get('name', '')
+            brand = data.get('brand_name', '')
+            cat = data.get('category_name', '')
+
+            prompt = (
+                f"Actúa como un experto en ventas y marketing. Escribe una descripción atractiva "
+                f"para un producto llamado '{name}' de la marca '{brand}' ({cat}). "
+                f"Máximo 300 caracteres. Tono profesional."
+            )
+
+            response = model.generate_content(prompt)
+            return Response({'description': response.text})
+        
+        except Exception as e:
+            print(f"Error IA: {e}")
+            return Response({"error": "Error al conectar con la IA"}, status=500)
 
 class BrandViewSet(viewsets.ModelViewSet):
     queryset = Brand.objects.all()
