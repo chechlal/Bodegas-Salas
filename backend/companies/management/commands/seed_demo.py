@@ -3,109 +3,164 @@ from django.contrib.auth.models import User
 from companies.models import Company, UserProfile
 from api.models import Product, Brand, Category, Provider, ProductImage, StockMovement
 import random
+import os
+import shutil
+from django.conf import settings
 from django.core.files.base import ContentFile
 import requests
 
 class Command(BaseCommand):
-    help = 'Genera datos de prueba completos con imágenes simuladas para la demo'
+    help = 'Genera datos de prueba completos con limpieza profunda e imágenes reales.'
 
     def handle(self, *args, **kwargs):
-        self.stdout.write(self.style.WARNING('🧹 Limpiando base de datos completa...'))
+        self.stdout.write(self.style.WARNING('⚠️ INICIANDO REINICIO DE FÁBRICA...'))
+
+        # 1. LIMPIEZA DE ARCHIVOS MEDIA
+        media_root = settings.MEDIA_ROOT
+        try:
+            if os.path.exists(media_root):
+                shutil.rmtree(media_root)
+                self.stdout.write('🗑️  Carpeta Media eliminada.')
+            os.makedirs(media_root, exist_ok=True)
+            self.stdout.write('✨ Carpeta Media recreada limpia.')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'Error limpiando media: {e}'))
+
+        # 2. LIMPIEZA DE BASE DE DATOS
+        self.stdout.write('🧹 Limpiando tablas de BD...')
         
-        # 1. Borrar datos antiguos en orden para respetar claves foráneas
+        # Primero borramos los datos transaccionales y maestros
         StockMovement.objects.all().delete()
         ProductImage.objects.all().delete()
         Product.objects.all().delete()
         Brand.objects.all().delete()
         Category.objects.all().delete()
         Provider.objects.all().delete()
+        
+        # --- BLOQUE CRÍTICO: BORRADO DE HISTORIAL (AUDITORÍA) ---
+        # Estas líneas son las que faltaban en tu archivo anterior
+        self.stdout.write('🧹 Purgando historial de cambios (Auditoría)...')
+        try:
+            Product.history.all().delete()
+            Brand.history.all().delete()
+            Category.history.all().delete()
+            Provider.history.all().delete()
+            ProductImage.history.all().delete()
+            self.stdout.write('✅ Historial eliminado (Contador a cero).')
+        except Exception as e:
+             self.stdout.write(self.style.WARNING(f'Nota: {e}'))
+        # -------------------------------------------------------
+
+        # Limpiamos perfiles antiguos
         UserProfile.objects.all().delete()
-        User.objects.exclude(is_superuser=True).delete() # Mantener superusuario si existe
         Company.objects.all().delete()
 
-        # 2. Crear Empresa y Usuarios
-        self.stdout.write('🏭 Creando Empresa y Actores...')
+        # 3. CREACIÓN / RECICLAJE DE ACTORES
+        self.stdout.write('🏭 Creando Empresa y Usuarios...')
         company = Company.objects.create(name="Bodegas Salas Ltda", rut="76.123.456-K")
 
-        # Admin
-        admin_user = User.objects.create_user('admin', 'admin@bodegassalas.cl', 'admin123')
-        admin_user.first_name = "Juan"
-        admin_user.last_name = "Soto"
-        admin_user.save()
-        UserProfile.objects.filter(user=admin_user).update(company=company, role='ADMIN', phone='+56911111111')
+        # --- ADMIN (Reciclaje Inteligente) ---
+        if User.objects.filter(username='admin').exists():
+            admin = User.objects.get(username='admin')
+            admin.set_password('admin123')
+            admin.first_name = "Juan"
+            admin.last_name = "Soto"
+            admin.save()
+            self.stdout.write('♻️  Usuario admin existente reciclado.')
+        else:
+            admin = User.objects.create_user('admin', 'admin@demo.cl', 'admin123')
+            admin.first_name = "Juan"
+            admin.last_name = "Soto"
+            admin.save()
+            self.stdout.write('👤 Usuario admin creado.')
 
-        # Vendedor
-        seller_user = User.objects.create_user('vendedor', 'vendedor@bodegassalas.cl', 'seller123')
-        seller_user.first_name = "María"
-        seller_user.last_name = "Pérez"
-        seller_user.save()
-        UserProfile.objects.filter(user=seller_user).update(company=company, role='SELLER', phone='+56922222222')
+        # Usamos update_or_create para evitar errores si el perfil ya existe
+        UserProfile.objects.update_or_create(
+            user=admin,
+            defaults={'company': company, 'role': 'ADMIN', 'phone': '+5699999999'}
+        )
 
-        # 3. Crear Maestros
-        self.stdout.write('📦 Creando Marcas, Categorías y Proveedores...')
-        
-        brands_list = ['Samsung', 'LG', 'Sony', 'Bosch', 'Makita', 'Stanley', 'Lenovo', 'HP', 'Generico']
-        brands_db = [Brand.objects.create(name=b) for b in brands_list]
+        # --- VENDEDOR (Reciclaje Inteligente) ---
+        if User.objects.filter(username='vendedor').exists():
+            seller = User.objects.get(username='vendedor')
+            seller.set_password('seller123')
+            seller.first_name = "María"
+            seller.last_name = "Pérez"
+            seller.save()
+            self.stdout.write('♻️  Usuario vendedor existente reciclado.')
+        else:
+            seller = User.objects.create_user('vendedor', 'vendedor@demo.cl', 'seller123')
+            seller.first_name = "María"
+            seller.last_name = "Pérez"
+            seller.save()
+            self.stdout.write('👤 Usuario vendedor creado.')
 
-        cats_list = [
-            ('Electrónica', '300x300/000/fff?text=Electro'), 
-            ('Herramientas', '300x300/550/fff?text=Tool'), 
-            ('Hogar', '300x300/282/fff?text=Home'), 
-            ('Computación', '300x300/007/fff?text=PC')
+        UserProfile.objects.update_or_create(
+            user=seller,
+            defaults={'company': company, 'role': 'SELLER', 'phone': '+5698888888'}
+        )
+
+        # 4. DATOS MAESTROS (MARCAS, CATS)
+        brands = ['Makita', 'Bosch', 'Stanley', 'Samsung', 'LG', 'Lenovo', 'HP', 'Generico']
+        brands_objs = [Brand.objects.get_or_create(name=b)[0] for b in brands]
+
+        cats_data = [
+            ('Herramientas', '7d4e57'), 
+            ('Electrónica', '364f6b'), 
+            ('Hogar', '3fc1c9'), 
+            ('Computación', 'fc5185')
         ]
-        cats_db = []
-        for c_name, c_img in cats_list:
-            cats_db.append(Category.objects.create(name=c_name))
+        cats_objs = []
+        for name, color in cats_data:
+            cat, _ = Category.objects.get_or_create(name=name)
+            cats_objs.append(cat)
 
-        provs_list = ['TecnoGlobal', 'Intcomex', 'Sodimac Pro', 'Importadora Asia']
-        provs_db = [Provider.objects.create(name=p) for p in provs_list]
+        providers = [Provider.objects.get_or_create(name=p)[0] for p in ['Sodimac Pro', 'Ingram Micro', 'AliExpress']]
 
-        # 4. Crear Productos
+        # 5. GENERACIÓN DE PRODUCTOS
         self.stdout.write('🚀 Generando 50 productos con imágenes...')
         
-        adjetivos = ['Pro', 'Ultra', 'Plus', 'Básico', 'Industrial', 'Home']
-        sustantivos = ['Taladro', 'Monitor', 'Notebook', 'Refrigerador', 'Lavadora', 'Sierra', 'Martillo', 'Televisor', 'Mouse', 'Teclado']
+        products_data = [
+            ('Taladro Percutor', 'Herramientas'), ('Sierra Circular', 'Herramientas'), ('Martillo', 'Herramientas'),
+            ('Smart TV 55"', 'Electrónica'), ('Refrigerador', 'Hogar'), ('Notebook Gamer', 'Computación'),
+            ('Mouse Inalámbrico', 'Computación'), ('Lavadora 10kg', 'Hogar'), ('Microondas', 'Hogar')
+        ]
 
         for i in range(50):
-            nombre = f"{random.choice(sustantivos)} {random.choice(brands_list)} {random.choice(adjetivos)}"
-            cat_idx = random.randint(0, len(cats_db)-1)
-            category = cats_db[cat_idx]
+            base_prod = random.choice(products_data)
+            p_name = f"{base_prod[0]} {random.choice(['Pro', 'X', 'Ultra', 'Lite'])}"
             
-            # Generar URL de imagen dummy según categoría para dar color
-            img_url = f"https://dummyimage.com/{cats_list[cat_idx][1]}"
+            cat_obj = next((c for c in cats_objs if c.name == base_prod[1]), cats_objs[0])
+            color_hex = next((c[1] for c in cats_data if c[0] == cat_obj.name), 'ccc')
+            img_url = f"https://dummyimage.com/400x400/{color_hex}/fff&text={p_name.replace(' ', '+')}"
 
             prod = Product.objects.create(
-                user=admin_user,
-                nombre_comercial=nombre,
-                brand=random.choice(brands_db),
+                user=admin,
+                nombre_comercial=p_name,
+                brand=random.choice(brands_objs),
                 ean=f"780{random.randint(100000000, 999999999)}",
                 sku=f"SKU-{1000+i}",
-                category=category,
-                peso=random.randint(1, 50),
-                dimensiones=f"{random.randint(10,100)}x{random.randint(10,100)}x{random.randint(10,100)}",
-                descripcion=f"Producto de alta calidad {nombre}. Ideal para uso intensivo. Garantía 1 año.",
-                costo_cg=random.randint(5000, 500000),
-                lugar_bodega=f"Pasillo {random.choice(['A','B','C'])}-{random.randint(1,20)}",
-                provider=random.choice(provs_db),
-                stock=random.randint(0, 100),
-                precio_venta=random.randint(10000, 900000),
-                rating=round(random.uniform(3.0, 5.0), 1)
+                category=cat_obj,
+                peso=random.randint(1, 20),
+                dimensiones="30x20x10",
+                descripcion=f"Descripción profesional del producto {p_name}. Ideal para uso intensivo.",
+                costo_cg=random.randint(5000, 100000),
+                provider=random.choice(providers),
+                stock=random.randint(5, 100),
+                precio_venta=random.randint(15000, 200000),
+                lugar_bodega=f"Pasillo {random.choice(['A','B'])}"
             )
 
-            # Descargar y guardar imagen
             try:
-                img_resp = requests.get(img_url)
-                if img_resp.status_code == 200:
-                    img_name = f"prod_{i}.jpg"
+                response = requests.get(img_url, timeout=5)
+                if response.status_code == 200:
                     ProductImage.objects.create(
                         product=prod,
-                        image=ContentFile(img_resp.content, name=img_name),
+                        image=ContentFile(response.content, name=f"prod_{i}.jpg"),
                         is_principal=True
                     )
             except Exception as e:
-                self.stdout.write(self.style.ERROR(f'Error imagen prod {i}: {e}'))
+                self.stdout.write(self.style.WARNING(f"No se pudo descargar imagen para {p_name}: {e}"))
 
-        self.stdout.write(self.style.SUCCESS(f'✅ ¡ÉXITO! Se crearon 50 productos listos y coloridos.'))
+        self.stdout.write(self.style.SUCCESS('✅ ¡DEMO CARGADA! Historial limpio e imágenes generadas.'))
         self.stdout.write(f'--------------------------------------------------')
-        self.stdout.write(f'🔑 Admin:    admin / admin123')
-        self.stdout.write(f'🔑 Vendedor: vendedor / seller123')
