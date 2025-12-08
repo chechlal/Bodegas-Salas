@@ -5,10 +5,12 @@ from .models import StockMovement
 
 class StockMovementSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
+    product_name = serializers.ReadOnlyField(source='product.nombre_comercial')
+
     class Meta:
         model = StockMovement
-        fields = ['id', 'product', 'quantity', 'movement_type', 'reason', 'user', 'created_at']
-        read_only_fields = ['user', 'created_at'] # El usuario y fecha se ponen solos
+        fields = ['id', 'product', 'product_name', 'quantity', 'movement_type', 'reason', 'user', 'created_at']
+        read_only_fields = ['user', 'created_at']
     
     def validate(self, data):
         if data['movement_type'] == 'OUT':

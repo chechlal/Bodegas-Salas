@@ -1,10 +1,11 @@
 from django.db import models
-from simple_history.models import HistoricalRecords # type: ignore
+from simple_history.models import HistoricalRecords
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.conf import settings
 from django.db.models.signals import post_delete, pre_save
 from django.dispatch import receiver
+from django.db import transaction
 import os
 
 class Brand(models.Model):
@@ -76,9 +77,10 @@ class Product(models.Model):
         entradas = self.movements.filter(movement_type='IN').aggregate(total=models.Sum('quantity'))['total'] or 0
         salidas = self.movements.filter(movement_type='OUT').aggregate(total=models.Sum('quantity'))['total'] or 0
         
-        self.stock = entradas - salidas
-        # Guardamos solo el campo stock para optimizar y evitar bucles
-        self.save(update_fields=['stock'])
+        # [CORRECCIÓN CRÍTICA] Usamos max(0, ...) para evitar números negativos 
+        # que rompen la base de datos si el historial está desincronizado.
+        self.stock = max(0, entradas - salidas)
+        self.save()
 
     def __str__(self):
         return f"{self.nombre_comercial} ({self.sku})"
@@ -123,10 +125,12 @@ class StockMovement(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Fecha Movimiento"))
 
     def save(self, *args, **kwargs):
-        # 1. Guardamos el movimiento primero
-        super().save(*args, **kwargs)
-        # 2. Le ordenamos al producto que se recalcule
-        self.product.recalcular_stock()
+        # [MEJORA] Atomicidad: Si falla recalcular, se borra el movimiento automáticamente
+        with transaction.atomic():
+            # 1. Guardamos el movimiento
+            super().save(*args, **kwargs)
+            # 2. Le ordenamos al producto que se recalcule
+            self.product.recalcular_stock()
 
     def __str__(self):
         return f"{self.get_movement_type_display()} - {self.product.nombre_comercial} ({self.quantity})"
