@@ -25,7 +25,13 @@ function Menu({ theme, toggleTheme }) {
       <Container>
         {/* LOGO */}
         <Navbar.Brand as={Link} to={user ? "/catalogo" : "/"} className="d-flex align-items-center gap-2">
-          <i className="bi bi-box-seam-fill text-primary fs-4"></i>
+          <img 
+            src="/logo192.png" 
+            alt="Logo Bodegas Salas" 
+            width="30" 
+            height="30" 
+            className="d-inline-block align-top rounded"
+          />
           <span className="fw-bold tracking-tight">Bodegas Salas</span>
         </Navbar.Brand>
         

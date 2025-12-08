@@ -38,9 +38,12 @@ function Login() {
           <div className="col-md-6 col-lg-4">
             
             <div className="text-center mb-4">
-              <div className="bg-primary bg-gradient text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow" style={{width: 64, height: 64}}>
-                <i className="bi bi-box-seam fs-2"></i>
-              </div>
+              <img 
+                src="/logo192.png" 
+                alt="Logo" 
+                className="mb-3 shadow-sm rounded-circle bg-white p-1"
+                style={{ width: 80, height: 80, objectFit: 'contain' }} 
+              />
               <h2 className="fw-bold mt-3 text-body">Bienvenido</h2>
               <p className="text-muted">Ingresa a tu cuenta para gestionar</p>
             </div>

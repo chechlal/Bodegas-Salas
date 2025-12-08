@@ -10,8 +10,14 @@ const Home = () => {
       <div className="bg-dark text-white py-5 text-center shadow position-relative overflow-hidden">
         <div className="position-absolute top-0 start-0 w-100 h-100 bg-gradient opacity-25" style={{background: 'linear-gradient(45deg, #2c3e50, #000)'}}></div>
         <Container className="position-relative z-1 py-5">
-          <div className="mb-3 animate-up">
-            <i className="bi bi-box-seam display-1 text-primary"></i>
+          <div className="mb-4 animate-up">
+            <div className="bg-white rounded-circle p-3 d-inline-block shadow-lg">
+              <img 
+                src="/logo192.png" // Usa el de 192px, es suficiente
+                alt="Logo Bodegas Salas" 
+                style={{ width: '80px', height: '80px', objectFit: 'contain' }} 
+              />
+            </div>
           </div>
           <h1 className="display-3 fw-bold mb-3">Bodegas Salas ERP</h1>
           <p className="lead text-white-50 mb-5 fs-4">
