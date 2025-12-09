@@ -7,6 +7,9 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.exceptions import MethodNotAllowed
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.core.mail import send_mail
+from rest_framework.throttling import AnonRateThrottle
 from companies.permissions import IsAdminOrReadOnly, IsSellerUser, IsSellerUserOrAdmin
 from datetime import datetime, timedelta, date
 from django.db.models.functions import TruncDate
@@ -251,3 +254,49 @@ class ProductHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Product.history.all().order_by('-history_date')
     serializer_class = HistoricalProductSerializer
     permission_classes = [IsAdminUser]
+
+class ContactEmailView(APIView):
+    permission_classes = []
+    throttle_classes = [AnonRateThrottle]
+
+    def post(self, request):
+        data = request.data
+
+        name = data.get('name', '').strip()
+        email = data.get('email', '').strip()
+        message_body = data.get('message', '').strip()
+        subject_type = data.get('subject', 'Consulta General')
+
+        if not name or not email or not message_body:
+            return Response(
+                {"status": "error", "message": "Por favor completa todos los campos requeridos."}, 
+                status=400
+            )
+
+        full_message = f"""
+        NUEVO CONTACTO DESDE LA WEB
+        ============================
+
+        NOMBRE: {name}
+        EMAIL: {email}
+        ASUNTO: {subject_type}
+
+        MENSAJE:    
+        {message_body}
+
+        ============================
+        Enviado automáticamente por Bodegas Salas ERP
+        """
+
+        try:
+            send_mail(
+                subject=f"Contacto Web: {subject_type} - {name}",
+                message=full_message,
+                from_email='rsfdez286@gmail.com',
+                recipient_list=['rsfdez286@gmail.com'],
+                fail_silently=False,
+            )
+            return Response({"status": "success", "message": "Correo enviado correctamente"})
+        except Exception as e:
+            print(f"Error enviando correo: {str(e)}")
+            return Response({"status": "error", "message": str(e)}, status=500)

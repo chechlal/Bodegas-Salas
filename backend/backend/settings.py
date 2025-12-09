@@ -155,7 +155,10 @@ REST_FRAMEWORK = {
         # Por defecto, solo usuarios autenticados pueden hacer cambios.
         # Los usuarios anónimos (usuarios "normales") solo pueden leer.
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
-    )
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '3/minute',
+    }
 }
 
 SIMPLE_JWT = {
@@ -167,3 +170,11 @@ SIMPLE_JWT = {
     'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
