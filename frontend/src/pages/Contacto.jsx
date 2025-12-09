@@ -29,7 +29,7 @@ const Contacto = () => {
 
     try {
         // Ajusta la URL si tu backend está en otro puerto/host
-      const response = await fetch('https://bodegas-salas-api.onrender.com/api/contact-form/', {
+      const response = await fetch('https://bodegas-salas-api.onrender.com/api/mensajeria-general/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)
