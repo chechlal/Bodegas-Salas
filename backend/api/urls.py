@@ -12,5 +12,5 @@ router.register(r'product-history', ProductHistoryViewSet, basename='product-his
 router.register(r'stock-movements', StockMovementViewSet)
 
 urlpatterns = router.urls + [
-    path('contact-form/', ContactEmailView.as_view(), name='contact-form'),
+    path('mensajeria-general/', ContactEmailView.as_view(), name='mensajeria-general'),
 ]
